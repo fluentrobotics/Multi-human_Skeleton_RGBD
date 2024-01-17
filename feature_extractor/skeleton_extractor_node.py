@@ -9,7 +9,9 @@ import rospy
 import message_filters
 import numpy as np
 from typing import Optional, TypedDict
+from rospy.numpy_msg import numpy_msg
 
+from std_msgs.msg import Int16MultiArray, Float32MultiArray
 from geometry_msgs.msg import PoseArray, Pose, Quaternion, Point, PointStamped
 from visualization_msgs.msg import Marker, MarkerArray
 from sensor_msgs.msg import Image, CompressedImage, CameraInfo
@@ -29,9 +31,12 @@ DEPTH_ALIGNED_TOPIC = '/camera/aligned_depth_to_color/image_raw'
 CAMERA_INFO_TOPIC = '/camera/aligned_depth_to_color/camera_info'
 
 # pub
-SKELETON_TOPIC = '/skeleton/keypoints_3d'
-DEBUG_MARKER_SKELETON = '/skeleton/markers/data'
-DEBUG_VIS_SKELETON = '/skeleton/vis/keypoints_vis'
+SKELETON_HUMAN_ID_TOPIC = 'skeleton/numpy_msg/human_id'
+SKELETON_MASK_MAT_TOPIC = 'skeleton/numpy_msg/mask'
+RAW_SKELETON_TOPIC = '/skeleton/numpy_msg/raw_keypoints_3d'
+FILTERED_SKELETON_TOPIC = '/skeleton/numpy_msg/filtered_keypoints_3d'
+VIS_3D_SKELETON = '/skeleton/markers/keypoints_3d'
+VIS_2D_SKELETON = '/skeleton/compressed/keypoints_2d'
 PUB_FREQ : float = 20.0
 
 CAMERA_FRAME = "camera_color_optical_frame"
@@ -50,7 +55,7 @@ class skeletal_extractor_node():
                  syn: bool = False, 
                  pose_model: str = 'yolov8m-pose.pt',
                  use_kalman: bool = True,
-                 vis = True,
+                 vis: bool = True,
     ):
         """
         
@@ -66,12 +71,13 @@ class skeletal_extractor_node():
         self._POSE_model = YOLO(get_pose_model_dir() / pose_model)
         self._POSE_KEYPOINTS = 17
         self.human_dict = dict()
+        self.keypoints_HKD: np.ndarray
 
         # get ROS param ####
         # ########################################
         
 
-        # Subscriber #############################
+        # Subscriber ##########################################################
         self._rgb_sub = message_filters.Subscriber(
             COLOR_FRAME_TOPIC, CompressedImage, self._rgb_callback, queue_size=1
         )
@@ -86,23 +92,34 @@ class skeletal_extractor_node():
             self._subSync = message_filters.ApproximateTimeSynchronizer([self.rgb_sub, self.depth_sub],
                                                                 queue_size=1)
             self._subSync.registerCallback(self._callback)
-        # ########################################
+        # #####################################################################
         
         
-        # Publisher ##############################     
+        # Publisher ###########################################################     
         # TODO: verify the msg type
-        self._skeleton_pub = rospy.Publisher(
-            SKELETON_TOPIC, PoseArray,queue_size=1
+        self._skeleton_human_id_pub = rospy.Publisher(
+            SKELETON_HUMAN_ID_TOPIC, numpy_msg(Int16MultiArray), queue_size=1
         )
-        
+        self._skeleton_mask_mat_pub = rospy.Publisher(
+            SKELETON_MASK_MAT_TOPIC, numpy_msg(Int16MultiArray), queue_size=1
+        )
+        self._raw_skeleton_pub = rospy.Publisher(
+            RAW_SKELETON_TOPIC, numpy_msg(Float32MultiArray), queue_size=1
+        )
+        self._filtered_skeleton_pub = rospy.Publisher(
+            FILTERED_SKELETON_TOPIC, numpy_msg(Float32MultiArray), queue_size=1
+        )
         # self._debug_marker_skeleton = rospy.Publisher(
         #     DEBUG_MARKER_SKELETON, Marker,queue_size=1
         # )
-        if vis:
-            self._debug_vis_skeleton = rospy.Publisher(
-                DEBUG_VIS_SKELETON, CompressedImage, queue_size=1
+        if self.vis:
+            self._keypoints_2d_pub = rospy.Publisher(
+                VIS_2D_SKELETON, CompressedImage, queue_size=1
             )
-        # ########################################
+            self._keypoints_3d_pub = rospy.Publisher(
+                VIS_2D_SKELETON, MarkerArray, queue_size=1
+            )
+        # #####################################################################
         
         
         # Camera Calibration Info ################
@@ -173,6 +190,8 @@ class skeletal_extractor_node():
         if num_keypoints == 0 or id_human == None:
             return
 
+        # TODO: warning if too many human in the dictionary
+        # if len(self.human_dict) >= MAX_dict_vol:
 
         # delele missing pedestrians
         for key, value in self.human_dict.items():
@@ -182,8 +201,8 @@ class skeletal_extractor_node():
                 del self.human_dict[key]
                 # python memory management system will release deleted space in the future
    
-
-        for id in id_human:
+        keypoints_3d = np.zeros((num_human, num_keypoints, 3))  # [H,K,3]
+        for idx, id in enumerate(id_human,0):
             # query or set if non-existing
             self.human_dict.setdefault(id, HumanKeypointsFilter(id=id, gaussian_blur=True, minimal_filter=True))
             self.human_dict[id].missing_count = 0       # reset missing_count of existing human
@@ -197,8 +216,23 @@ class skeletal_extractor_node():
             assert keypoints_cam.shape[0] == self._POSE_KEYPOINTS, 'There must be K keypoints'
             
             self.human_dict[id].keypoints_filtered = keypoints_cam
-            
+            keypoints_3d[idx] = keypoints_cam     # [K,3]
+        
+        # Publish keypoints and markers
+        # TODO: show missing pedestrians?
 
+        # id_msg = Int16MultiArray()
+        # id_msg.data = id_human.tolist()     # much faster than for loop
+        
+        # NOTE: Vectorization
+        # Alignment: id_human, keypoints_3d
+
+        self._skeleton_human_id_pub.publish(id_human)       # numpy_msg
+        self._raw_skeleton_pub = 
+
+        if self.vis:
+            self._keypoints_2d_pub
+            self._keypoints_3d_pub
 
 
 # class yolo_extractor_2D():

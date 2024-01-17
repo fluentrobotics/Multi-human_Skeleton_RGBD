@@ -20,9 +20,10 @@ class HumanKeypointsFilter:
         optional: gaussian_blur, minimal_filter
         """
         self.id = id
-        self.keypoints_filtered: np.ndarray = None              # 3D keypoints [3, K]
+        self.keypoints_filtered: np.ndarray = None              # 3D keypoints [K,3]
         self.missing_count: int = 0
         self.valid_keypoints: np.ndarray                        # valid keypoint mask
+        
         
         self.gaussian_blur = gaussian_blur
         self.minimal_filter = minimal_filter

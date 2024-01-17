@@ -63,12 +63,14 @@ def main():
 
         if topic == image_topic:
             cv_img = bridge.imgmsg_to_cv2(msg)
-            print(type(cv_img))
-            print('color:',cv_img.shape)            # [720,1280,3]
+            # print(type(cv_img))
+            # print('color:',cv_img.shape)            # [720,1280,3]
             cv_img = cv2.rotate(cv_img, cv2.ROTATE_90_CLOCKWISE)
-            print(cv_img.shape)
+            # print(cv_img.shape)
             
             results = model.predict(cv_img)
+            res = results[0]
+
             # print(results[0].keypoints.shape)
             # cv_img = results[0].plot()
             # # cv2.imshow('RealSense RGB',cv_img)
@@ -76,7 +78,10 @@ def main():
             # if key == ord('q'):
             #     break
 
-            # if results[0].keypoints.shape[0] in (1,2) and results[0].keypoints.shape[1] != 0:
+            if results[0].keypoints.shape[0] in (1,2) and results[0].keypoints.shape[1] != 0:
+                print(res.keypoints.data.shape)
+                print(type(res.keypoints.data[0,0,0]))
+                break
             #     aaaaa = results[0].keypoints
             #     print(type(aaaaa.data))
             #     print(results[0].keypoints)
