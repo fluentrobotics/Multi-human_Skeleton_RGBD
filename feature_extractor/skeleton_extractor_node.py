@@ -37,7 +37,7 @@ RAW_SKELETON_TOPIC = '/skeleton/numpy_msg/raw_keypoints_3d'
 FILTERED_SKELETON_TOPIC = '/skeleton/numpy_msg/filtered_keypoints_3d'
 VIS_IMG2D_SKELETON_TOPIC = '/skeleton/compressed/keypoints_2d'
 VIS_MARKER3D_SKELETON_TOPIC = '/skeleton/markers/keypoints_3d'
-PUB_FREQ : float = 20.0
+PUB_FREQ : float = 30.0
 
 CAMERA_FRAME = "camera_color_optical_frame"
 
@@ -418,7 +418,7 @@ def delete_human_marker(human_id: ID_TYPE,
 #         self.keypoints_filtered: np.ndarray = None               # 3D keypoints [3, K]
 
 
-def main():
+def main() -> None:
     rospy.init_node(SKELETON_NODE)
     node = skeletal_extractor_node()
     
