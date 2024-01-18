@@ -70,12 +70,12 @@ class HumanKeypointsFilter:
         """
         # valid keypoints mask
         valid_xy = keypoints_2d[:,:2] != 0.00        # bool [K,2]
-        self.valid_keypoints = valid_xy[:,0] & valid_xy[:,1]  # bool vector [K,]
+        self.valid_keypoints = valid_xy[:,0] & valid_xy[:,1]        # bool vector [K,]
 
         # check rotation
         if rotate == cv2.ROTATE_90_CLOCKWISE:
-            axis_0 = depth_frame.shape[0] - keypoints_2d[:, 0:1]  # vector [K,]
-            axis_1 = keypoints_2d[:, 1:2]                         # vector [K,]
+            axis_0 = depth_frame.shape[0] - keypoints_2d[:, 0:1]    # vector [K,]
+            axis_1 = keypoints_2d[:, 1:2]                           # vector [K,]
         else:
             # no ratation
             axis_0 = keypoints_2d[:, 1:2]
@@ -112,7 +112,7 @@ class HumanKeypointsFilter:
             # NOTE: need vectorization?
             for k in range(K):
                 self.filters[k] = KalmanFilter(freq=freq)
-                self.filters[k].initialize(raw_keypoints_cam[k])        # raw_keypoints_cam[k] is a xyz vector
+                self.filters[k].initialize(raw_keypoints_cam[k,...])        # raw_keypoints_cam[k] is a xyz vector
                 keypoints_filtered[k] = self.filters[k].getMeasAfterInitialize()
         else:
             for k in range(K):

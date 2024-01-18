@@ -11,7 +11,7 @@ import numpy as np
 from typing import Optional, TypedDict
 from rospy.numpy_msg import numpy_msg
 
-from std_msgs.msg import Int16MultiArray, Float32MultiArray
+from std_msgs.msg import Int32MultiArray, Float32MultiArray, Header, ColorRGBA
 from geometry_msgs.msg import PoseArray, Pose, Quaternion, Point, PointStamped
 from visualization_msgs.msg import Marker, MarkerArray
 from sensor_msgs.msg import Image, CompressedImage, CameraInfo
@@ -35,18 +35,25 @@ SKELETON_HUMAN_ID_TOPIC = 'skeleton/numpy_msg/human_id'
 SKELETON_MASK_MAT_TOPIC = 'skeleton/numpy_msg/mask'
 RAW_SKELETON_TOPIC = '/skeleton/numpy_msg/raw_keypoints_3d'
 FILTERED_SKELETON_TOPIC = '/skeleton/numpy_msg/filtered_keypoints_3d'
-VIS_3D_SKELETON = '/skeleton/markers/keypoints_3d'
-VIS_2D_SKELETON = '/skeleton/compressed/keypoints_2d'
+VIS_IMG2D_SKELETON_TOPIC = '/skeleton/compressed/keypoints_2d'
+VIS_MARKER3D_SKELETON_TOPIC = '/skeleton/markers/keypoints_3d'
 PUB_FREQ : float = 20.0
 
 CAMERA_FRAME = "camera_color_optical_frame"
 
 SKELETON_NODE = "skeleton"
 
-ID_TYPE = np.int16
+ID_TYPE = np.int32
+HUMAN_MARKER_ID_VOL = 1000
+KEYPOINT_ID_OFFSET = 0
+LINE_ID_OFFSET = 500
 
 bridge = CvBridge()
-MAX_missing_count = 10
+MAX_missing_count = 3
+
+SKELETAL_LINE_PAIRS_LIST = [(4,2),(2,0),(0,1),(1,3),
+                            (10,8),(8,6),(6,5),(5,7),(7,8),
+                            (6,12),(12,14),(14,16),(5,11),(11,13),(13,15),(12,11)]
 
 class skeletal_extractor_node():
     def __init__(self, 
@@ -91,17 +98,17 @@ class skeletal_extractor_node():
         if self.syn:
             self._subSync = message_filters.ApproximateTimeSynchronizer([self.rgb_sub, self.depth_sub],
                                                                 queue_size=1)
-            self._subSync.registerCallback(self._callback)
+            self._subSync.registerCallback(self._syn_callback)
         # #####################################################################
         
         
         # Publisher ###########################################################     
         # TODO: verify the msg type
         self._skeleton_human_id_pub = rospy.Publisher(
-            SKELETON_HUMAN_ID_TOPIC, numpy_msg(Int16MultiArray), queue_size=1
+            SKELETON_HUMAN_ID_TOPIC, numpy_msg(Int32MultiArray), queue_size=1
         )
         self._skeleton_mask_mat_pub = rospy.Publisher(
-            SKELETON_MASK_MAT_TOPIC, numpy_msg(Int16MultiArray), queue_size=1
+            SKELETON_MASK_MAT_TOPIC, numpy_msg(Int32MultiArray), queue_size=1
         )
         self._raw_skeleton_pub = rospy.Publisher(
             RAW_SKELETON_TOPIC, numpy_msg(Float32MultiArray), queue_size=1
@@ -109,15 +116,12 @@ class skeletal_extractor_node():
         self._filtered_skeleton_pub = rospy.Publisher(
             FILTERED_SKELETON_TOPIC, numpy_msg(Float32MultiArray), queue_size=1
         )
-        # self._debug_marker_skeleton = rospy.Publisher(
-        #     DEBUG_MARKER_SKELETON, Marker,queue_size=1
-        # )
         if self.vis:
-            self._keypoints_2d_pub = rospy.Publisher(
-                VIS_2D_SKELETON, CompressedImage, queue_size=1
+            self._vis_keypoints_img2d_pub = rospy.Publisher(
+                VIS_IMG2D_SKELETON_TOPIC, CompressedImage, queue_size=1
             )
-            self._keypoints_3d_pub = rospy.Publisher(
-                VIS_2D_SKELETON, MarkerArray, queue_size=1
+            self._vis_keypoints_marker3d_pub = rospy.Publisher(
+                VIS_MARKER3D_SKELETON_TOPIC, MarkerArray, queue_size=1
             )
         # #####################################################################
         
@@ -142,7 +146,7 @@ class skeletal_extractor_node():
     # ########################################
 
     
-    def _callback(self):
+    def _syn_callback(self):
         self._skeleton_inference_and_publish()
 
 
@@ -202,38 +206,128 @@ class skeletal_extractor_node():
                 # python memory management system will release deleted space in the future
    
         keypoints_3d = np.zeros((num_human, num_keypoints, 3))  # [H,K,3]
-        for idx, id in enumerate(id_human,0):
+        keypoints_raw = np.zeros((num_human, num_keypoints, 3)) # [H,K,3]
+        keypoints_mask = np.zeros((num_human, num_keypoints))   # [H,K]
+        for idx, id in enumerate(id_human, start=0):
             # query or set if non-existing
             self.human_dict.setdefault(id, HumanKeypointsFilter(id=id, gaussian_blur=True, minimal_filter=True))
             self.human_dict[id].missing_count = 0       # reset missing_count of existing human
 
             # [K,3]
             keypoints_cam = self.human_dict[id].align_depth_with_color(keypoints_2d, depth_frame, self._intrinsic_matrix, rotate=self.rotate)
-
+            keypoints_raw[idx,...] = keypoints_cam      # [K,3]
             if self.use_kalman:
                 keypoints_cam = self.human_dict[id].kalmanfilter_cam(keypoints_cam)
             
             assert keypoints_cam.shape[0] == self._POSE_KEYPOINTS, 'There must be K keypoints'
             
             self.human_dict[id].keypoints_filtered = keypoints_cam
-            keypoints_3d[idx] = keypoints_cam     # [K,3]
+            keypoints_3d[idx,...] = keypoints_cam     # [K,3]
+            keypoints_mask[idx,...] = self.human_dict[id].valid_keypoints
         
         # Publish keypoints and markers
         # TODO: show missing pedestrians?
 
-        # id_msg = Int16MultiArray()
+        # id_msg = Int32MultiArray()
         # id_msg.data = id_human.tolist()     # much faster than for loop
         
-        # NOTE: Vectorization
-        # Alignment: id_human, keypoints_3d
-
-        self._skeleton_human_id_pub.publish(id_human)       # numpy_msg
-        self._raw_skeleton_pub = 
+        # NOTE: numoy_msg
+        self._skeleton_human_id_pub.publish(id_human)           # [H,]
+        self._skeleton_mask_mat_pub.publish(keypoints_mask)     # [H,K]
+        self._raw_skeleton_pub.publish(keypoints_raw)           # [H,K,D]
+        self._filtered_skeleton_pub.publish(keypoints_3d)       # [H,K,D]
 
         if self.vis:
-            self._keypoints_2d_pub
-            self._keypoints_3d_pub
+            self._vis_keypoints_img2d_pub.publish(yolo_res.plot())
 
+            marker_array = MarkerArray()
+            self._vis_keypoints_marker3d_pub.publish()
+
+
+##############################################################################################
+# VISUALIZATION function #####################################################################
+def add_human_keypoint_MarkerArrah(human_id: ID_TYPE, 
+                                   keypoint_KD: np.ndarray,
+                                   keypoint_mask_K: np.ndarray, 
+                                   frame_id = "skeleton_frame",
+                                   ns = "skeleton",
+                                   offset = KEYPOINT_ID_OFFSET) -> MarkerArray:
+    """
+    @human_id: ID_TYPE(np.int32)
+    @keypoint_KD: [K,3]
+    @keypoint_mask_K: [K,]
+
+    return single human skeletal points MarkerArray
+    """
+    
+    marker_array = MarkerArray()
+    K, D = keypoint_KD.shape
+    
+    for keypoint_id in range(K):
+
+        if keypoint_mask_K[keypoint_id]:
+            marker = Marker()
+            marker.header.frame_id = frame_id
+            # marker.header.stamp = rospy.Time.now()
+            marker.ns = ns
+            marker.id = human_id * HUMAN_MARKER_ID_VOL + keypoint_id + offset
+            marker.type = Marker.SPHERE
+            marker.action = Marker.ADD
+            marker.pose.position.x = keypoint_KD[keypoint_id, 0]
+            marker.pose.position.y = keypoint_KD[keypoint_id, 1]
+            marker.pose.position.z = keypoint_KD[keypoint_id, 2]
+            marker.scale.x = 0.05
+            marker.scale.y = 0.05
+            marker.scale.z = 0.05
+            marker.color = ColorRGBA(1.0, 0.0, 0.0, 1.0)
+            marker_array.markers.append(marker)
+
+    return marker_array
+
+
+def add_human_keypoint_line_Marker(human_id: ID_TYPE, 
+                                   keypoint_KD: np.ndarray,
+                                   keypoint_mask_K: np.ndarray,
+                                   frame_id = "skeleton_frame",
+                                   ns = "skeleton",
+                                   offset = LINE_ID_OFFSET) -> Marker:
+    """
+    @human_id: ID_TYPE(np.int32)
+    @keypoint_KD: [K,3]
+    @keypoint_mask_K: [K,]
+
+    return single human skeletal lines MarkerArray
+    """
+    K, D = keypoint_KD.shape
+    include_list = np.arange(K)[keypoint_mask_K].astype(np.int32)
+    filtered_list = [pair for pair in SKELETAL_LINE_PAIRS_LIST 
+                     if pair[0] in include_list and pair[1] in include_list]
+
+    marker = Marker()
+    marker.header.frame_id = frame_id
+    marker.ns = ns
+    marker.id = human_id * HUMAN_MARKER_ID_VOL + offset
+    marker.type = Marker.LINE_LIST
+    marker.action = Marker.ADD
+    marker.scale.x = 0.02
+    marker.color = ColorRGBA(0.0, 1.0, 0.0, 1.0)
+
+    for valid_pair in filtered_list:
+        start_pos = Point(keypoint_KD[valid_pair[0],0], 
+                          keypoint_KD[valid_pair[0],1],
+                          keypoint_KD[valid_pair[0],2])
+        
+        end_pos = Point(keypoint_KD[valid_pair[1],0], 
+                        keypoint_KD[valid_pair[1],1],
+                        keypoint_KD[valid_pair[1],2])
+        
+        marker.points.extend([start_pos, end_pos])
+
+    return marker
+        
+
+
+    
 
 # class yolo_extractor_2D():
 #     """generate 2d keypoints from a single image or images
