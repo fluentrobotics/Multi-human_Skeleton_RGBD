@@ -48,6 +48,7 @@ def main():
     image_topic = "/camera/color/image_raw/compressed"
     depth_topic = "/camera/aligned_depth_to_color/image_raw"
     depth_topic = "/camera/aligned_depth_to_color/image_raw/compressed"
+    cam_info_topic = "/camera/color/camera_info"
 
     output_dir = "/home/xmo/bagfiles/extract/"
 
@@ -56,14 +57,17 @@ def main():
     count = 0
     img_c = 0
     dep_c = 0
-    for topic, msg, t in bag.read_messages(topics=[image_topic, depth_topic]):
+    for topic, msg, t in bag.read_messages(topics=[image_topic, depth_topic, cam_info_topic]):
         # print('seq:',msg.header.seq, '      TOPIC:',topic, '     T:', t, )
+        if topic == cam_info_topic:
+            print("camera info:", msg)
 
         if topic == depth_topic:
             depth_frame = bridge.compressed_imgmsg_to_cv2(msg)
             print('depth:',depth_frame.shape)       # [720,1280]
 
         if topic == image_topic:
+            print("color")
             cv_img = bridge.compressed_imgmsg_to_cv2(msg)
             # print(type(cv_img))
             # print('color:',cv_img.shape)            # [720,1280,3]
@@ -85,7 +89,7 @@ def main():
             #     print(type(res.keypoints.data[0,0,0]))
             #     break
     
-        input()
+        
         # cv2.imwrite(os.path.join(output_dir, "frame%06i.png" % count), cv_img)
         # print "Wrote image %i" % count
 

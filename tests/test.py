@@ -1,3 +1,5 @@
-from pathlib import Path
-for parent in Path(__file__).parents:
-    print(parent)
+from feature_extractor.utils import get_pose_model_dir, logger
+
+dir = get_pose_model_dir()
+
+logger.info(dir)

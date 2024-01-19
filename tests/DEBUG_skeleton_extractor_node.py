@@ -1,5 +1,6 @@
 """Extract images and publish skeletons.
 """
+# NOTE: test with manual intrinsic matrix and unsyncronized imgs
 
 import os
 import argparse
@@ -29,7 +30,7 @@ from feature_extractor.utils import get_pose_model_dir, logger
 COLOR_FRAME_TOPIC = '/camera/color/image_raw'
 DEPTH_ALIGNED_TOPIC = '/camera/aligned_depth_to_color/image_raw'
 CAMERA_INFO_TOPIC = '/camera/aligned_depth_to_color/camera_info'
-
+CAMERA_INTRINSIC = [906.7041625976562, 0.0, 653.4981689453125, 0.0, 906.7589111328125, 375.4635009765625, 0.0, 0.0, 1.0]
 # pub
 SKELETON_HUMAN_ID_TOPIC = 'skeleton/numpy_msg/human_id'
 SKELETON_MASK_MAT_TOPIC = 'skeleton/numpy_msg/mask'
@@ -37,7 +38,7 @@ RAW_SKELETON_TOPIC = '/skeleton/numpy_msg/raw_keypoints_3d'
 FILTERED_SKELETON_TOPIC = '/skeleton/numpy_msg/filtered_keypoints_3d'
 VIS_IMG2D_SKELETON_TOPIC = '/skeleton/compressed/keypoints_2d'
 VIS_MARKER3D_SKELETON_TOPIC = '/skeleton/markers/keypoints_3d'
-PUB_FREQ : float = 30.0
+PUB_FREQ : float = 1.0
 
 CAMERA_FRAME = "camera_color_optical_frame"
 
@@ -144,10 +145,10 @@ class skeletal_extractor_node():
         
         
         # Camera Calibration Info ################
-        camera_info_msg: CameraInfo = rospy.wait_for_message(
-            CAMERA_INFO_TOPIC, CameraInfo, timeout=5
-        )
-        self._intrinsic_matrix = np.array(camera_info_msg.K).reshape(3,3)
+        # camera_info_msg: CameraInfo = rospy.wait_for_message(
+        #     CAMERA_INFO_TOPIC, CameraInfo, timeout=5
+        # )
+        self._intrinsic_matrix = np.array(CAMERA_INTRINSIC).reshape(3,3)
         # ########################################
         
     
@@ -430,6 +431,7 @@ def delete_human_marker(human_id: ID_TYPE,
 
 
 def main() -> None:
+    logger.warning("Waiting until roscore launched")
     rospy.init_node(SKELETON_NODE)
     node = skeletal_extractor_node()
     logger.success("Skeleton Node initialized")
@@ -439,6 +441,7 @@ def main() -> None:
     while not rospy.is_shutdown():
         # TODO: manage publisher frequency
         node._skeleton_inference_and_publish()
+        logger.success("Published")
         rospy.sleep(1/PUB_FREQ)
 
 if __name__ == '__main__':
