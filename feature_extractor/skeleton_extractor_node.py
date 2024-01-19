@@ -23,7 +23,7 @@ from ultralytics.engine.results import Results
 
 # from feature_extractor.KalmanFilter import KalmanFilter
 from feature_extractor.HumanKeypointsFilter import HumanKeypointsFilter
-from feature_extractor.utils import get_pose_model_dir
+from feature_extractor.utils import get_pose_model_dir, logger
 
 # sub
 COLOR_FRAME_TOPIC = '/camera/color/image_raw'
@@ -79,6 +79,17 @@ class skeletal_extractor_node():
         self.vis = vis
         self.use_kalman = use_kalman
 
+        logger.info(f"Initialization\n rotate={self.rotate}\n \
+                    compressed={self.compressed}\n \
+                    syncronization={self.syn}\n \
+                    pose_model={self._POSE_model}\n \
+                    KalmanFilter={self.use_kalman}\n \
+                    Visualization={self.vis}\n \
+                    PubFreqency={PUB_FREQ}\n \
+                    NodeName={SKELETON_NODE}\n \
+                    MaxMissingCount={MAX_missing_count}\n \
+                    ")
+        
         # yolov8n-pose, yolov8s-pose, yolov8m-pose, yolov8l-pose, yolov8x-pose, yolov8x-pose-p6
         self._POSE_model = YOLO(get_pose_model_dir() / pose_model)
         self._POSE_KEYPOINTS = 17
@@ -139,9 +150,9 @@ class skeletal_extractor_node():
         self._intrinsic_matrix = np.array(camera_info_msg.K).reshape(3,3)
         # ########################################
         
-        rospy.spin()
     
-    
+
+
     def _rgb_callback(self, msg: Image | CompressedImage) -> None:
         self._rgb_msg = msg
 
@@ -421,6 +432,9 @@ def delete_human_marker(human_id: ID_TYPE,
 def main() -> None:
     rospy.init_node(SKELETON_NODE)
     node = skeletal_extractor_node()
+    logger.success("Skeleton Node initialized")
+
+    rospy.spin()
     
     while not rospy.is_shutdown():
         # TODO: manage publisher frequency
@@ -428,5 +442,5 @@ def main() -> None:
         rospy.sleep(1/PUB_FREQ)
 
 if __name__ == '__main__':
-    
+
     main()

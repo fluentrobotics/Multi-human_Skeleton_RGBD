@@ -26,3 +26,4 @@ if __name__ == "__main__":
     module_name: str = namespace.__getattribute__("name:")
 
     feature_extractor.__getattribute__(module_name).main()
+    # print("entry")
