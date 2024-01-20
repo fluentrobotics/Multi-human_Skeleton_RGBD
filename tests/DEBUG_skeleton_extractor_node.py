@@ -1,7 +1,6 @@
 """Extract images and publish skeletons.
 """
 # NOTE: test with manual intrinsic matrix and unsyncronized imgs
-
 import os
 import argparse
 import cv2
@@ -12,7 +11,7 @@ import numpy as np
 from typing import Optional, TypedDict
 from rospy.numpy_msg import numpy_msg
 
-from std_msgs.msg import Int32MultiArray, Float32MultiArray, Header, ColorRGBA
+from std_msgs.msg import Int32MultiArray, Float32MultiArray, Header, ColorRGBA, MultiArrayDimension
 from geometry_msgs.msg import PoseArray, Pose, Quaternion, Point, PointStamped
 from visualization_msgs.msg import Marker, MarkerArray
 from sensor_msgs.msg import Image, CompressedImage, CameraInfo
@@ -28,7 +27,9 @@ from feature_extractor.utils import get_pose_model_dir, logger
 
 # sub
 COLOR_FRAME_TOPIC = '/camera/color/image_raw'
+COLOR_COMPRESSED_FRAME_TOPIC = '/camera/color/image_raw/compressed'
 DEPTH_ALIGNED_TOPIC = '/camera/aligned_depth_to_color/image_raw'
+DEPTH_ALIGNED_COMPRESSED_TOPIC = '/camera/aligned_depth_to_color/image_raw/compressed'
 CAMERA_INFO_TOPIC = '/camera/aligned_depth_to_color/camera_info'
 CAMERA_INTRINSIC = [906.7041625976562, 0.0, 653.4981689453125, 0.0, 906.7589111328125, 375.4635009765625, 0.0, 0.0, 1.0]
 # pub
@@ -38,7 +39,7 @@ RAW_SKELETON_TOPIC = '/skeleton/numpy_msg/raw_keypoints_3d'
 FILTERED_SKELETON_TOPIC = '/skeleton/numpy_msg/filtered_keypoints_3d'
 VIS_IMG2D_SKELETON_TOPIC = '/skeleton/compressed/keypoints_2d'
 VIS_MARKER3D_SKELETON_TOPIC = '/skeleton/markers/keypoints_3d'
-PUB_FREQ : float = 1.0
+PUB_FREQ : float = 20
 
 CAMERA_FRAME = "camera_color_optical_frame"
 
@@ -80,7 +81,7 @@ class skeletal_extractor_node():
         self.vis = vis
         self.use_kalman = use_kalman
 
-        logger.info(f"Initialization\n rotate={self.rotate}\n \
+        logger.info(f"\nInitialization\n rotate={self.rotate}\n \
                     compressed={self.compressed}\n \
                     syncronization={self.syn}\n \
                     pose_model={pose_model}\n \
@@ -102,21 +103,24 @@ class skeletal_extractor_node():
         
 
         # Subscriber ##########################################################
-        self._rgb_sub = message_filters.Subscriber(
-            COLOR_FRAME_TOPIC, CompressedImage, self._rgb_callback, queue_size=1
+        if self.compressed['rgb']:
+            self._rgb_sub = rospy.Subscriber(
+                COLOR_COMPRESSED_FRAME_TOPIC, CompressedImage, self._rgb_callback, queue_size=1
+            )
+        else:
+            self._rgb_sub = rospy.Subscriber(
+                COLOR_FRAME_TOPIC, Image, self._rgb_callback, queue_size=1
+            )
+        if self.compressed['depth']:
+            self._depth_sub = rospy.Subscriber(
+            DEPTH_ALIGNED_COMPRESSED_TOPIC, CompressedImage, self._depth_callback, queue_size=1
         )
-        self._depth_sub = message_filters.Subscriber(
+        else:
+            self._depth_sub = rospy.Subscriber(
             DEPTH_ALIGNED_TOPIC, Image, self._depth_callback, queue_size=1
         )
         self._rgb_msg: Optional[CompressedImage] = None
         self._depth_msg: Optional[Image] = None
-        
-        # TODO: built-in syncronization or customized syn, now built-in
-        if self.syn:
-            self._subSync = message_filters.ApproximateTimeSynchronizer([self.rgb_sub, self.depth_sub],
-                                                                queue_size=1)
-            self._subSync.registerCallback(self._syn_callback)
-        # #####################################################################
         
         
         # Publisher ###########################################################     
@@ -155,20 +159,16 @@ class skeletal_extractor_node():
 
 
     def _rgb_callback(self, msg: Image | CompressedImage) -> None:
+        # logger.success("Receive RGB msg")
         self._rgb_msg = msg
 
     def _depth_callback(self, msg: Image | CompressedImage) -> None:
+        # logger.success("Receive Depth msg")
         self._depth_msg = msg
-    
-    # TODO: def subscriber callback if necessary
-    # ########################################
-
-    
-    def _syn_callback(self):
-        self._skeleton_inference_and_publish()
 
 
     def _skeleton_inference_and_publish(self) -> None:
+        # logger.debug("function _skeleton_inference_and_publish")
         if self._rgb_msg is None or self._depth_msg is None:
             return
         
@@ -185,11 +185,11 @@ class skeletal_extractor_node():
         else:
             depth_frame = bridge.imgmsg_to_cv2(self._depth_msg)
         depth_frame = depth_frame.astype(np.float32) / 1e3          # millimeter to meter
-            
+        # logger.debug(f"bgr shape:{bgr_frame.shape}, depth shape:{depth_frame.shape}")
         # rotate img
         if self.rotate is not None:
             bgr_frame = cv2.rotate(bgr_frame, self.rotate)
-            depth_frame = cv2.rotate(depth_frame, self.rotate)
+            # no need to rotate depth frame because we should rotate the bgr frame inversely afterwards
         
         # 2D-keypoints
         # res.keypoints.data : tensor [human, keypoints, 3 (x, y, confidence) ] float
@@ -197,26 +197,36 @@ class skeletal_extractor_node():
         # res.boxes.id : [human_id, ] float
         results: list[Results] = self._POSE_model.track(bgr_frame, persist=True, verbose=False)
         if not results:
+            # logger.warning("No Result")
             return
         yolo_res = results[0]
         
         # 2D -> 3D ################################################################
         num_human, num_keypoints, num_dim = yolo_res.keypoints.data.shape
-        conf_keypoints = yolo_res.keypoints.conf        # [H,K]
-        keypoints_2d = yolo_res.keypoints.data             # [H,K,D(x,y,conf)] [H, 17, 3]
-
-        conf_boxes = yolo_res.boxes.conf                # [H]
-        id_human = yolo_res.boxes.id.astype(ID_TYPE)    # [H]
-
-        # if no detections, gets [1,0,51]
-        if num_keypoints == 0 or id_human == None:
+        if num_keypoints == 0:
+            # logger.warning("No Keypoint Detection")
             return
+        
+        id_human = yolo_res.boxes.id                    # Tensor [H]
+        
+        # if no detections, gets [1,0,51], yolo_res.boxes.id=None
+        if id_human is None:
+            # logger.warning("No Human Box Detection")
+            return
+        # logger.debug(f"\ndata shape:{yolo_res.keypoints.data.shape}\nhuman ID:{id_human}")
+        logger.info("Find Keypoints")
+        conf_keypoints = yolo_res.keypoints.conf.cpu().numpy()        # Tensor [H,K]
+        keypoints_2d = yolo_res.keypoints.data.cpu().numpy()          # Tensor [H,K,D(x,y,conf)] [H, 17, 3]
+
+        conf_boxes = yolo_res.boxes.conf.cpu().numpy()                # Tensor [H,]
+        id_human = id_human.cpu().numpy().astype(ID_TYPE)                 # Tensor
+
 
         # TODO: warning if too many human in the dictionary
         # if len(self.human_dict) >= MAX_dict_vol:
         all_marker_list = []
         # delele missing pedestrians
-        for key, value in self.human_dict.items():
+        for key, value in list(self.human_dict.items()):
             value.missing_count += 1
             if value.missing_count > MAX_missing_count:
                 self.human_dict[key] = None
@@ -227,7 +237,7 @@ class skeletal_extractor_node():
                 if self.vis:
                     delete_list = delete_human_marker(key, offset_list=[KEYPOINT_ID_OFFSET, LINE_ID_OFFSET])
                     all_marker_list.extend(delete_list)
-                
+
    
         keypoints_3d = np.zeros((num_human, num_keypoints, 3))  # [H,K,3]
         keypoints_raw = np.zeros((num_human, num_keypoints, 3)) # [H,K,3]
@@ -238,7 +248,7 @@ class skeletal_extractor_node():
             self.human_dict[id].missing_count = 0       # reset missing_count of existing human
 
             # [K,3]
-            keypoints_cam = self.human_dict[id].align_depth_with_color(keypoints_2d, depth_frame, self._intrinsic_matrix, rotate=self.rotate)
+            keypoints_cam = self.human_dict[id].align_depth_with_color(keypoints_2d[idx,...], depth_frame, self._intrinsic_matrix, rotate=self.rotate)
             keypoints_raw[idx,...] = keypoints_cam      # [K,3]
             if self.use_kalman:
                 keypoints_cam = self.human_dict[id].kalmanfilter_cam(keypoints_cam)     # [K,3]
@@ -265,6 +275,9 @@ class skeletal_extractor_node():
                 
                 all_marker_list.extend([add_keypoint_marker, add_line_marker])
                 
+
+        logger.info(f"currenr human id: {id_human}")
+        
         # Publish keypoints and markers
         # TODO: show missing pedestrians?
 
@@ -272,19 +285,23 @@ class skeletal_extractor_node():
         # id_msg.data = id_human.tolist()     # much faster than for loop
         
         # NOTE: numpy_msg
-        self._skeleton_human_id_pub.publish(id_human)           # [H,]
-        self._skeleton_mask_mat_pub.publish(keypoints_mask)     # [H,K]
-        self._raw_skeleton_pub.publish(keypoints_raw)           # [H,K,D]
-        self._filtered_skeleton_pub.publish(keypoints_3d)       # [H,K,D]
+        self._skeleton_human_id_pub.publish(data=id_human)           # [H,]
+        self._skeleton_mask_mat_pub.publish(data=keypoints_mask)     # [H,K]
+        self._raw_skeleton_pub.publish(data=keypoints_raw)           # [H,K,D]
+        self._filtered_skeleton_pub.publish(data=keypoints_3d)       # [H,K,D]
 
         # VISUALIZATION ####################################################
         if self.vis:
-            self._vis_keypoints_img2d_pub.publish(yolo_res.plot())
+            yolo_plot = yolo_res.plot()
+            # logger.debug(f"\nyolo res:\n{yolo_plot}")
+            vis_2d_compressed_img = bridge.cv2_to_compressed_imgmsg(yolo_plot)
+            self._vis_keypoints_img2d_pub.publish(vis_2d_compressed_img)
 
             all_marker_array = MarkerArray()
             all_marker_array.markers = all_marker_list
             self._vis_keypoints_marker3d_pub.publish(all_marker_array)
-
+        
+        logger.success("Publish Successfully")
 
 ##############################################################################################
 # VISUALIZATION function #####################################################################
@@ -433,15 +450,16 @@ def delete_human_marker(human_id: ID_TYPE,
 def main() -> None:
     logger.warning("Waiting until roscore launched")
     rospy.init_node(SKELETON_NODE)
-    node = skeletal_extractor_node()
+    compressed_dict = {'rgb': True, 'depth': False}
+    node = skeletal_extractor_node(compressed=compressed_dict)
     logger.success("Skeleton Node initialized")
 
-    rospy.spin()
+    # rospy.spin()
     
     while not rospy.is_shutdown():
         # TODO: manage publisher frequency
         node._skeleton_inference_and_publish()
-        logger.success("Published")
+        # logger.success("Published")
         rospy.sleep(1/PUB_FREQ)
 
 if __name__ == '__main__':

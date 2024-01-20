@@ -27,9 +27,11 @@ from feature_extractor.utils import get_pose_model_dir, logger
 
 # sub
 COLOR_FRAME_TOPIC = '/camera/color/image_raw'
+COLOR_COMPRESSED_FRAME_TOPIC = '/camera/color/image_raw/compressed'
 DEPTH_ALIGNED_TOPIC = '/camera/aligned_depth_to_color/image_raw'
+DEPTH_ALIGNED_COMPRESSED_TOPIC = '/camera/aligned_depth_to_color/image_raw/compressed'
 CAMERA_INFO_TOPIC = '/camera/aligned_depth_to_color/camera_info'
-
+# CAMERA_INTRINSIC = [906.7041625976562, 0.0, 653.4981689453125, 0.0, 906.7589111328125, 375.4635009765625, 0.0, 0.0, 1.0]
 # pub
 SKELETON_HUMAN_ID_TOPIC = 'skeleton/numpy_msg/human_id'
 SKELETON_MASK_MAT_TOPIC = 'skeleton/numpy_msg/mask'
@@ -101,10 +103,20 @@ class skeletal_extractor_node():
         
 
         # Subscriber ##########################################################
-        self._rgb_sub = message_filters.Subscriber(
-            COLOR_FRAME_TOPIC, CompressedImage, self._rgb_callback, queue_size=1
+        if self.compressed['rgb']:
+            self._rgb_sub = rospy.Subscriber(
+                COLOR_COMPRESSED_FRAME_TOPIC, CompressedImage, self._rgb_callback, queue_size=1
+            )
+        else:
+            self._rgb_sub = rospy.Subscriber(
+                COLOR_FRAME_TOPIC, Image, self._rgb_callback, queue_size=1
+            )
+        if self.compressed['depth']:
+            self._depth_sub = rospy.Subscriber(
+            DEPTH_ALIGNED_COMPRESSED_TOPIC, CompressedImage, self._depth_callback, queue_size=1
         )
-        self._depth_sub = message_filters.Subscriber(
+        else:
+            self._depth_sub = rospy.Subscriber(
             DEPTH_ALIGNED_TOPIC, Image, self._depth_callback, queue_size=1
         )
         self._rgb_msg: Optional[CompressedImage] = None
@@ -112,6 +124,13 @@ class skeletal_extractor_node():
         
         # TODO: built-in syncronization or customized syn, now built-in
         if self.syn:
+            self._rgb_sub = message_filters.Subscriber(
+                COLOR_FRAME_TOPIC, CompressedImage, queue_size=1
+            )
+            self._depth_sub = message_filters.Subscriber(
+                DEPTH_ALIGNED_TOPIC, Image, queue_size=1
+            )
+
             self._subSync = message_filters.ApproximateTimeSynchronizer([self.rgb_sub, self.depth_sub],
                                                                 queue_size=1)
             self._subSync.registerCallback(self._syn_callback)
@@ -209,6 +228,7 @@ class skeletal_extractor_node():
 
         # if no detections, gets [1,0,51]
         if num_keypoints == 0 or id_human == None:
+            # 
             return
 
         # TODO: warning if too many human in the dictionary

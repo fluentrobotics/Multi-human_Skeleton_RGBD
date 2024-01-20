@@ -1,6 +1,8 @@
 import numpy as np
 import cv2
 from feature_extractor.KalmanFilter import KalmanFilter
+from feature_extractor.utils import logger
+
 
 class HumanKeypointsFilter:
     """
@@ -35,25 +37,30 @@ class HumanKeypointsFilter:
         @depth_frame: [axis_0, axis_1]
         @kernel_size: (m,m)
         """
-        return cv2.GaussianBlur(depth_frame, kernel_size)
+        return cv2.GaussianBlur(depth_frame, kernel_size, 0)
     
-    def minimalFilter(self, depth_frame, keypoint_pixel, kernel_size=(11,11)) -> np.ndarray:
+    def minimalFilter(self, depth_frame, keypoints_pixel, kernel_size=(11,11)) -> np.ndarray:
         """
-        @keypoint_pixel: [K,3]
+        @keypoint_pixels: [K-,3]
         """
-        shape = cv2.MORPH_RECT
-        kernel = cv2.getStructuringElement(shape, kernel_size)
+        # shape = cv2.MORPH_RECT
+        # kernel = cv2.getStructuringElement(shape, kernel_size)
         img_shape = depth_frame.shape
-        width, height = kernel[1] - 1 >> 1, kernel[0] - 1 >> 1
-        for keypoint_pos in keypoint_pixel[:, :2]:
-            left = keypoint_pos[1] - width
-            right = keypoint_pos[1] + width
-            top = keypoint_pos[0] - height
-            bottom = keypoint_pos[0] + height
+        # logger.debug(f"depth img shape: {img_shape}")
+        # valid mask
+        keypoints_pixel = keypoints_pixel[self.valid_keypoints,...]
+        for keypoint_pos in keypoints_pixel[:, :2]:
+            left = keypoint_pos[1] - kernel_size[1] // 2
+            top = keypoint_pos[0] - kernel_size[0] // 2
+            right = left + kernel_size[1]
+            bottom = top + kernel_size[0]
+            # logger.debug(f"left right top bottom:{left,right,top,bottom}")
             # check if out of boundary
             if left < 0 or right > img_shape[1] or top < 0 or bottom > img_shape[0]:
                 break
-            depth_frame = cv2.erode(depth_frame[left:left+height, top:top+height], kernel)
+            # depth_frame = cv2.erode(depth_frame[left:right, top:bottom], kernel)
+
+            depth_frame[top:bottom,left:right] = np.min(depth_frame[top:bottom,left:right])
             
         return depth_frame
         
@@ -69,13 +76,16 @@ class HumanKeypointsFilter:
         return keypoints in camera coordinate [K,3]
         """
         # valid keypoints mask
+        # logger.debug(f"keypoints_2d:\n{keypoints_2d}")
         valid_xy = keypoints_2d[:,:2] != 0.00        # bool [K,2]
         self.valid_keypoints = valid_xy[:,0] & valid_xy[:,1]        # bool vector [K,]
-
-        # check rotation
+        # logger.debug(f"\nkeypoint mask:\n{self.valid_keypoints}")
+        # logger.debug(f"\nkeypoint:\n{keypoints_2d}")
+        # convert keypoints to the original coordinate
         if rotate == cv2.ROTATE_90_CLOCKWISE:
-            axis_0 = depth_frame.shape[0] - keypoints_2d[:, 0:1]    # vector [K,]
-            axis_1 = keypoints_2d[:, 1:2]                           # vector [K,]
+            axis_0 = depth_frame.shape[0]-1 - keypoints_2d[:, 0:1]  # vector [K,1], -1 to within the idx range
+            axis_1 = keypoints_2d[:, 1:2]                           # vector [K,1]
+
         else:
             # no ratation
             axis_0 = keypoints_2d[:, 1:2]
@@ -106,7 +116,7 @@ class HumanKeypointsFilter:
         K, D = raw_keypoints_cam.shape
         keypoints_filtered = np.zeros_like(raw_keypoints_cam)
         
-        if self.filters == None:
+        if self.filters is None:
             # init keypoint kalman filter
             self.filters = np.empty(K, dtype=object)
             # NOTE: need vectorization?
