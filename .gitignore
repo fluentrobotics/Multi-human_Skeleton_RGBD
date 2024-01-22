@@ -6,3 +6,4 @@
 **/*.bag
 **/img/**
 **/bagfiles/**
+**/.pkl
