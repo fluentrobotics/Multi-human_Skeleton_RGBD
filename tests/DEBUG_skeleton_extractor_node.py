@@ -10,6 +10,7 @@ import message_filters
 import numpy as np
 from typing import Optional, TypedDict
 from rospy.numpy_msg import numpy_msg
+import pickle
 
 from std_msgs.msg import Int32MultiArray, Float32MultiArray, Header, ColorRGBA, MultiArrayDimension
 from geometry_msgs.msg import PoseArray, Pose, Quaternion, Point, PointStamped
@@ -37,9 +38,9 @@ SKELETON_HUMAN_ID_TOPIC = 'skeleton/numpy_msg/human_id'
 SKELETON_MASK_MAT_TOPIC = 'skeleton/numpy_msg/mask'
 RAW_SKELETON_TOPIC = '/skeleton/numpy_msg/raw_keypoints_3d'
 FILTERED_SKELETON_TOPIC = '/skeleton/numpy_msg/filtered_keypoints_3d'
-VIS_IMG2D_SKELETON_TOPIC = '/skeleton/compressed/keypoints_2d'
-VIS_MARKER3D_SKELETON_TOPIC = '/skeleton/markers/keypoints_3d'
-PUB_FREQ : float = 20
+VIS_IMG2D_SKELETON_TOPIC = '/skeleton/vis/keypoints_2d_img'
+VIS_MARKER3D_SKELETON_TOPIC = '/skeleton/vis/keypoints_3d_makers'
+PUB_FREQ:float = 20.0
 
 CAMERA_FRAME = "camera_color_optical_frame"
 
@@ -65,6 +66,8 @@ class skeletal_extractor_node():
                  pose_model: str = 'yolov8m-pose.pt',
                  use_kalman: bool = True,
                  vis: bool = True,
+                 gaussian_blur: bool = True,
+                 minimal_filter: bool = True,
     ):
         """
         @rotate: default =  cv2.ROTATE_90_CLOCKWISE
@@ -80,6 +83,8 @@ class skeletal_extractor_node():
         self.syn = syn
         self.vis = vis
         self.use_kalman = use_kalman
+        self.use_gaussian_blur = gaussian_blur
+        self.use_minimal_filter = minimal_filter
 
         logger.info(f"\nInitialization\n rotate={self.rotate}\n \
                     compressed={self.compressed}\n \
@@ -90,6 +95,8 @@ class skeletal_extractor_node():
                     PubFreqency={PUB_FREQ}\n \
                     NodeName={SKELETON_NODE}\n \
                     MaxMissingCount={MAX_missing_count}\n \
+                    Gaussian_blur={gaussian_blur}\n \
+                    Minimal_filter={minimal_filter}\n \
                     ")
         
         # yolov8n-pose, yolov8s-pose, yolov8m-pose, yolov8l-pose, yolov8x-pose, yolov8x-pose-p6
@@ -140,11 +147,18 @@ class skeletal_extractor_node():
         # VISUALIZATION ####################################################
         if self.vis:
             self._vis_keypoints_img2d_pub = rospy.Publisher(
-                VIS_IMG2D_SKELETON_TOPIC, CompressedImage, queue_size=1
+                VIS_IMG2D_SKELETON_TOPIC, Image, queue_size=1
             )
             self._vis_keypoints_marker3d_pub = rospy.Publisher(
                 VIS_MARKER3D_SKELETON_TOPIC, MarkerArray, queue_size=1
             )
+            # matplotlib
+            self.filtered_keypoints = None
+            self.keypoints_mask = None
+            self.keypoints_no_Kalman= None
+
+            # video
+            self.video_img_list = []
         # #####################################################################
         
         
@@ -198,23 +212,45 @@ class skeletal_extractor_node():
         results: list[Results] = self._POSE_model.track(bgr_frame, persist=True, verbose=False)
         if not results:
             # logger.warning("No Result")
+            if self.vis:
+                self.filtered_keypoints = None
+                self.keypoints_mask = None
+                self.keypoints_no_Kalman= None
             return
+        
         yolo_res = results[0]
         
+        if self.vis:
+            yolo_plot = yolo_res.plot()
+            # logger.debug(f"\nyolo res:\n{yolo_plot}")
+            vis_keypoint_2d_img = bridge.cv2_to_imgmsg(yolo_plot)
+            self._vis_keypoints_img2d_pub.publish(vis_keypoint_2d_img)
+
+            # video
+            self.video_img_list.append(yolo_plot)
         # 2D -> 3D ################################################################
         num_human, num_keypoints, num_dim = yolo_res.keypoints.data.shape
         if num_keypoints == 0:
             # logger.warning("No Keypoint Detection")
+            if self.vis:
+                self.filtered_keypoints = None
+                self.keypoints_mask = None
+                self.keypoints_no_Kalman= None
+
             return
         
         id_human = yolo_res.boxes.id                    # Tensor [H]
         
         # if no detections, gets [1,0,51], yolo_res.boxes.id=None
         if id_human is None:
+            if self.vis:
+                self.filtered_keypoints = None
+                self.keypoints_mask = None
+                self.keypoints_no_Kalman= None
             # logger.warning("No Human Box Detection")
             return
         # logger.debug(f"\ndata shape:{yolo_res.keypoints.data.shape}\nhuman ID:{id_human}")
-        logger.info("Find Keypoints")
+        # logger.info("Find Keypoints")
         conf_keypoints = yolo_res.keypoints.conf.cpu().numpy()        # Tensor [H,K]
         keypoints_2d = yolo_res.keypoints.data.cpu().numpy()          # Tensor [H,K,D(x,y,conf)] [H, 17, 3]
 
@@ -240,16 +276,18 @@ class skeletal_extractor_node():
 
    
         keypoints_3d = np.zeros((num_human, num_keypoints, 3))  # [H,K,3]
-        keypoints_raw = np.zeros((num_human, num_keypoints, 3)) # [H,K,3]
-        keypoints_mask = np.zeros((num_human, num_keypoints))   # [H,K]
+        keypoints_no_Kalman = np.zeros((num_human, num_keypoints, 3)) # [H,K,3]
+        keypoints_mask = np.zeros((num_human, num_keypoints),dtype=bool)   # [H,K]
         for idx, id in enumerate(id_human, start=0):
             # query or set if non-existing
-            self.human_dict.setdefault(id, HumanKeypointsFilter(id=id, gaussian_blur=True, minimal_filter=True))
+            self.human_dict.setdefault(id, HumanKeypointsFilter(id=id, 
+                                                                gaussian_blur=self.use_gaussian_blur, 
+                                                                minimal_filter=self.use_minimal_filter))
             self.human_dict[id].missing_count = 0       # reset missing_count of existing human
 
             # [K,3]
             keypoints_cam = self.human_dict[id].align_depth_with_color(keypoints_2d[idx,...], depth_frame, self._intrinsic_matrix, rotate=self.rotate)
-            keypoints_raw[idx,...] = keypoints_cam      # [K,3]
+            keypoints_no_Kalman[idx,...] = keypoints_cam      # [K,3]
             if self.use_kalman:
                 keypoints_cam = self.human_dict[id].kalmanfilter_cam(keypoints_cam)     # [K,3]
             
@@ -274,9 +312,13 @@ class skeletal_extractor_node():
                                                                  offset= LINE_ID_OFFSET)
                 
                 all_marker_list.extend([add_keypoint_marker, add_line_marker])
-                
+        
+        if self.vis:
+            self.filtered_keypoints = keypoints_3d
+            self.keypoints_mask = keypoints_mask
+            self.keypoints_no_Kalman = keypoints_no_Kalman
 
-        logger.info(f"currenr human id: {id_human}")
+        # logger.info(f"currenr human id: {id_human}")
         
         # Publish keypoints and markers
         # TODO: show missing pedestrians?
@@ -287,21 +329,19 @@ class skeletal_extractor_node():
         # NOTE: numpy_msg
         self._skeleton_human_id_pub.publish(data=id_human)           # [H,]
         self._skeleton_mask_mat_pub.publish(data=keypoints_mask)     # [H,K]
-        self._raw_skeleton_pub.publish(data=keypoints_raw)           # [H,K,D]
+        self._raw_skeleton_pub.publish(data=keypoints_no_Kalman)           # [H,K,D]
         self._filtered_skeleton_pub.publish(data=keypoints_3d)       # [H,K,D]
 
         # VISUALIZATION ####################################################
         if self.vis:
-            yolo_plot = yolo_res.plot()
-            # logger.debug(f"\nyolo res:\n{yolo_plot}")
-            vis_2d_compressed_img = bridge.cv2_to_compressed_imgmsg(yolo_plot)
-            self._vis_keypoints_img2d_pub.publish(vis_2d_compressed_img)
-
             all_marker_array = MarkerArray()
             all_marker_array.markers = all_marker_list
             self._vis_keypoints_marker3d_pub.publish(all_marker_array)
+            logger.success("Publish MakerArray")
+
+            # matplotlib 3d scatter
+            
         
-        logger.success("Publish Successfully")
 
 ##############################################################################################
 # VISUALIZATION function #####################################################################
@@ -329,6 +369,11 @@ def add_human_skeletal_keypoint_Marker(human_id: ID_TYPE,
     marker.scale.x = 0.05
     marker.scale.y = 0.05
     marker.scale.z = 0.05
+    marker.pose.orientation.x = 0.0
+    marker.pose.orientation.y = 0.0
+    marker.pose.orientation.z = 0.0
+    marker.pose.orientation.w = 1.0
+
     marker.color = ColorRGBA(1.0, 0.0, 0.0, 1.0)
     
     K, D = keypoint_KD.shape
@@ -451,17 +496,54 @@ def main() -> None:
     logger.warning("Waiting until roscore launched")
     rospy.init_node(SKELETON_NODE)
     compressed_dict = {'rgb': True, 'depth': False}
-    node = skeletal_extractor_node(compressed=compressed_dict)
+    node = skeletal_extractor_node(compressed=compressed_dict, use_kalman=True, minimal_filter=False)
     logger.success("Skeleton Node initialized")
 
     # rospy.spin()
-    
+
+    # record data
+    keypoints_list = []
+    mask_list = []
+    keypoints_no_Kalman_list = []
+
     while not rospy.is_shutdown():
         # TODO: manage publisher frequency
         node._skeleton_inference_and_publish()
         # logger.success("Published")
+        
+        # record data
+        if node.vis:
+            keypoints_list.append(node.filtered_keypoints)
+            mask_list.append(node.keypoints_mask)
+            keypoints_no_Kalman_list.append(node.keypoints_no_Kalman)
+
+            logger.info(f"recording length: {len(mask_list)}")
+
         rospy.sleep(1/PUB_FREQ)
 
-if __name__ == '__main__':
+    logger.success("rospy shutdown")
 
+    if node.vis:
+        file = open('/home/xmo/socialnav_xmo/feature_extractor/tests/test_Minimal_true.pkl','wb')
+        pickle.dump(keypoints_list, file)
+        pickle.dump(mask_list, file)
+        pickle.dump(keypoints_no_Kalman_list, file)
+
+        file.close()
+        logger.success("keypoints list saved")
+
+    # video
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    height, width, layers = node.video_img_list[0].shape
+    size = (width,height)
+    out = cv2.VideoWriter('/home/xmo/socialnav_xmo/feature_extractor/img/yolo_video.avi',fourcc,10, size)
+    for img in node.video_img_list:
+        out.write(img)
+
+    cv2.destroyAllWindows()
+    out.release()
+        
+
+
+if __name__ == '__main__':
     main()

@@ -4,3 +4,5 @@
 **/poetry.lock
 **/*.pt
 **/*.bag
+**/img/**
+**/bagfiles/**

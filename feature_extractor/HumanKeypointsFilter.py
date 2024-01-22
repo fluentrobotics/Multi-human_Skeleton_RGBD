@@ -79,6 +79,7 @@ class HumanKeypointsFilter:
         # logger.debug(f"keypoints_2d:\n{keypoints_2d}")
         valid_xy = keypoints_2d[:,:2] != 0.00        # bool [K,2]
         self.valid_keypoints = valid_xy[:,0] & valid_xy[:,1]        # bool vector [K,]
+        self.valid_keypoints = self.valid_keypoints.astype(bool)
         # logger.debug(f"\nkeypoint mask:\n{self.valid_keypoints}")
         # logger.debug(f"\nkeypoint:\n{keypoints_2d}")
         # convert keypoints to the original coordinate
