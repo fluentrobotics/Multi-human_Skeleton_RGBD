@@ -4,19 +4,18 @@ from matplotlib import pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 import time
 
+from feature_extractor.config import *
 
-file = open('/home/xmo/socialnav_xmo/feature_extractor/tests/test_Minimal_false.pkl', 'rb')
+pickle_path = DATA_DIR_PATH / "pickle" / TEST_NAME
+pickle_path = pickle_path.absolute().as_posix() + ".pkl"
+
+file = open(pickle_path, 'rb')
 keypoints_list = pickle.load(file)
 mask_list = pickle.load(file)
 keypoints_no_Kalman_list = pickle.load(file)
-
 file.close()
-freq = 15
+freq = PUB_FREQ
 
-# print(len(keypoints_list))
-# print(len(mask_list))
-
-fig_init = False
 
 plt.ion()
 fig = plt.figure()

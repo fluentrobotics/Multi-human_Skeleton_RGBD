@@ -29,6 +29,7 @@ torch = {version = "*", source = "PyTorch CUDA 11.8"}
 torchaudio = {version = "*", source = "PyTorch CUDA 11.8"}
 torchvision = {version = "*", source = "PyTorch CUDA 11.8"}
 matplotlib = "^3.8.0"
+# PyQt5 = "^5.9"
 loguru = "^0.7.2"
 numpy = "^1.26.1"
 onnx = ">=1.12.0"
