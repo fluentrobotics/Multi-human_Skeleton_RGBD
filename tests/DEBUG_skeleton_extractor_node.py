@@ -219,7 +219,7 @@ class skeletal_extractor_node():
         
         # 2D -> 3D ################################################################
         num_human, num_keypoints, num_dim = yolo_res.keypoints.data.shape
-        if num_keypoints == 0:
+        if num_keypoints == 0 or num_keypoints == 0:
             return
         
         id_human = yolo_res.boxes.id                    # Tensor [H]
@@ -234,7 +234,7 @@ class skeletal_extractor_node():
         keypoints_2d = yolo_res.keypoints.data.cpu().numpy()          # Tensor [H,K,D(x,y,conf)] [H, 17, 3]
 
         conf_boxes = yolo_res.boxes.conf.cpu().numpy()                # Tensor [H,]
-        id_human = id_human.cpu().numpy().astype(ID_TYPE)                 # Tensor
+        id_human = id_human.cpu().numpy().astype(ID_TYPE)             # Tensor
 
 
         # TODO: warning if too many human in the dictionary
@@ -281,6 +281,8 @@ class skeletal_extractor_node():
 
             keypoints_3d[idx,...] = keypoints_cam     # [K,3]
             keypoints_mask[idx,...] = self.human_dict[id].valid_keypoints
+            # id_human[idx] = id
+            # keypoints_xx[idx] = corelated data
         
             # RVIZ ####################################################
             if self.rviz:
@@ -509,7 +511,6 @@ def main() -> None:
         # out.release()
         # logger.success("Save Video successfully!")
         
-
 
 if __name__ == '__main__':
     main()

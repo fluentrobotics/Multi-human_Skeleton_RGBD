@@ -1,1 +1,1 @@
-# from . import skeleton_extractor_node
+# from . import skeleton_extractor_node     # import cv2 will conflict with matplotlib in the backend

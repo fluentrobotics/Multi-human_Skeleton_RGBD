@@ -104,7 +104,7 @@ class HumanKeypointsFilter:
         
         keypoints_depth = depth_frame[keypoints_pixel[:,0], keypoints_pixel[:,1]]               # [K,]
         #                   [3,3]           [3,K]               [K,K]
-        raw_keypoints_cam = intrinsic_mat @ keypoints_pixel.T @ np.diag(keypoints_depth)            # [3, K]
+        raw_keypoints_cam = np.linalg.inv(intrinsic_mat) @ keypoints_pixel.T @ np.diag(keypoints_depth)            # [3, K]
         return raw_keypoints_cam.T    #[K,3]
     
     

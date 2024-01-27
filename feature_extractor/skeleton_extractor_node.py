@@ -1,4 +1,4 @@
-"""Extract and publish skeletons from RGB-D camera.
+"""Extract images and publish skeletons.
 """
 import os
 import argparse
@@ -137,8 +137,9 @@ class skeletal_extractor_node():
             self.filtered_keypoints = None
             self.keypoints_mask = None
             self.keypoints_no_Kalman= None
-            # save YOLO video
-            self.video_img_list = []
+            # save YOLO plot
+            self.video_img = None
+
         # #####################################################################
         
         
@@ -147,7 +148,7 @@ class skeletal_extractor_node():
             CAMERA_INFO_TOPIC, CameraInfo, timeout=30
         )
         self._intrinsic_matrix = np.array(camera_info_msg.K).reshape(3,3)
-        logger.info(f"Camera Intrinsic Matrix:\n{self._intrinsic_matrix}")
+        logger.info(f"\nCamera Intrinsic Matrix:\n{self._intrinsic_matrix}")
         # ########################################
         
 
@@ -168,6 +169,7 @@ class skeletal_extractor_node():
             self.filtered_keypoints = None
             self.keypoints_mask = None
             self.keypoints_no_Kalman= None
+            self.YOLO_plot = None
         
         if self._rgb_msg is None or self._depth_msg is None:
             return
@@ -213,11 +215,11 @@ class skeletal_extractor_node():
         
         if self.save:
             # video
-            self.video_img_list.append(yolo_plot)
+            self.YOLO_plot = yolo_plot
         
         # 2D -> 3D ################################################################
         num_human, num_keypoints, num_dim = yolo_res.keypoints.data.shape
-        if num_keypoints == 0:
+        if num_keypoints == 0 or num_keypoints == 0:
             return
         
         id_human = yolo_res.boxes.id                    # Tensor [H]
@@ -232,7 +234,7 @@ class skeletal_extractor_node():
         keypoints_2d = yolo_res.keypoints.data.cpu().numpy()          # Tensor [H,K,D(x,y,conf)] [H, 17, 3]
 
         conf_boxes = yolo_res.boxes.conf.cpu().numpy()                # Tensor [H,]
-        id_human = id_human.cpu().numpy().astype(ID_TYPE)                 # Tensor
+        id_human = id_human.cpu().numpy().astype(ID_TYPE)             # Tensor
 
 
         # TODO: warning if too many human in the dictionary
@@ -279,6 +281,8 @@ class skeletal_extractor_node():
 
             keypoints_3d[idx,...] = keypoints_cam     # [K,3]
             keypoints_mask[idx,...] = self.human_dict[id].valid_keypoints
+            # id_human[idx] = id
+            # keypoints_xx[idx] = corelated data
         
             # RVIZ ####################################################
             if self.rviz:
@@ -445,6 +449,7 @@ def main() -> None:
     keypoints_list = []
     mask_list = []
     keypoints_no_Kalman_list = []
+    YOLO_plot_list = []
 
     while not rospy.is_shutdown():
         
@@ -455,7 +460,7 @@ def main() -> None:
             keypoints_list.append(node.filtered_keypoints)                  # List[np.ndarray]
             mask_list.append(node.keypoints_mask)                           # List[np.ndarray]
             keypoints_no_Kalman_list.append(node.keypoints_no_Kalman)       # List[np.ndarray]
-
+            YOLO_plot_list.append(node.YOLO_plot)                           # List[np.ndarray]
             # logger.info(f"recording length: {len(mask_list)}")
         
         # TODO: manage publisher frequency
@@ -465,10 +470,7 @@ def main() -> None:
 
     if node.save:
         pickle_path = DATA_DIR_PATH / "pickle" / TEST_NAME
-        pickle_path = pickle_path.absolute().as_posix() + ".pkl"
-
-        video_path = DATA_DIR_PATH / "video" / TEST_NAME
-        video_path = video_path.absolute().as_posix() + ".mp4"
+        pickle_path = pickle_path.absolute().as_posix() + "_keypoints.pkl"
         
         # numpy ndarray
         file = open(pickle_path, 'wb')
@@ -478,25 +480,37 @@ def main() -> None:
         file.close()
         
         logger.info(f"Data length: {len(mask_list)}")
-        logger.success("Save Array successfully!")
+        logger.success("Save Keypoints Array successfully!")
 
-        # video
-        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-        height, width, layers = node.video_img_list[0].shape
-        size = (width,height)
-        out = cv2.VideoWriter(filename=video_path,
-                              fourcc=fourcc,
-                              fps=PUB_FREQ,
-                              frameSize=size,
-                              )
-        for img in node.video_img_list:
-            out.write(img)
 
-        cv2.destroyAllWindows()
-        out.release()
-        logger.success("Save Video successfully!")
+    if SAVE_YOLO_IMG:
+        pickle_path = DATA_DIR_PATH / "pickle" / TEST_NAME
+        pickle_path = pickle_path.absolute().as_posix() + "_YOLOimgs.pkl"
+
+        file = open(pickle_path, 'wb')
+        pickle.dump(YOLO_plot_list, file)
+        file.close()
+        logger.info(f"Imgs length: {len(YOLO_plot_list)}")
+        logger.success("Save YOLO Imgs successfully!")
+
+        # # video
+        # video_path = DATA_DIR_PATH / "video" / TEST_NAME
+        # video_path = video_path.absolute().as_posix() + ".mp4"
+        # fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        # height, width, layers = node.video_img_list[0].shape
+        # size = (width,height)
+        # out = cv2.VideoWriter(filename=video_path,
+        #                       fourcc=fourcc,
+        #                       fps=PUB_FREQ,
+        #                       frameSize=size,
+        #                       )
+        # for img in node.video_img_list:
+        #     out.write(img)
+
+        # cv2.destroyAllWindows()
+        # out.release()
+        # logger.success("Save Video successfully!")
         
-
 
 if __name__ == '__main__':
     main()
