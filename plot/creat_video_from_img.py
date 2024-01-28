@@ -13,7 +13,7 @@ video_path = video_path.absolute().as_posix() + "_video.mp4"
 img_array = []
 fourcc = cv2.VideoWriter_fourcc(*'mp4v')
 
-count_max = 286
+count_max = 318
 for id in tqdm(range(count_max+1),
                ncols=80,
                colour="red",

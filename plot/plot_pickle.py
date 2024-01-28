@@ -39,18 +39,20 @@ ax1 = fig.add_subplot(1,2,1, projection='3d')
 ax2 = fig.add_subplot(1,2,2)
 
 # TODO: Adjust the scale
-ax1.axes.set_xlim3d(-0.5e6,2e6)
+ax1.axes.set_xlim3d(-2,2)
 ax1.set_xlabel('X-axis')
 
-ax1.axes.set_ylim3d(-5,0) 
-ax1.set_ylabel('Depth-axis')
+ax1.axes.set_ylim3d(-2,2) 
+ax1.set_ylabel('Y-axis')
 
-ax1.axes.set_zlim3d(-3e6,0e6) 
-ax1.set_zlabel('Y-axis')
+ax1.axes.set_zlim3d(0,4) 
+ax1.set_zlabel('Depth-axis')
 
 sc1 = ax1.scatter(0, 0, 0, color='r', label='Kalman')
 sc2 = ax1.scatter(0, 0, 0, color='b', label='no Kalman')
 
+# view position
+ax1.view_init(elev=-60, azim=-90)
 ax1.legend()
 
 # fig.show()
@@ -88,8 +90,8 @@ for data_Kalman, data_no_Kalman, mask, plot_2d in tqdm(zip(keypoints_list, keypo
         scatter_mat_Kalman = scatter_mat_Kalman[scatter_mask]     # [HK-,3]
         scatter_mat_no_Kalman = scatter_mat_no_Kalman[scatter_mask]     # [HK-,3]
 
-        sc1._offsets3d = (scatter_mat_Kalman[:,0], -scatter_mat_Kalman[:,2], -scatter_mat_Kalman[:,1])
-        sc2._offsets3d = (scatter_mat_no_Kalman[:,0], -scatter_mat_no_Kalman[:,2], -scatter_mat_no_Kalman[:,1])
+        sc1._offsets3d = (-scatter_mat_Kalman[:,0], scatter_mat_Kalman[:,1], scatter_mat_Kalman[:,2])
+        sc2._offsets3d = (-scatter_mat_no_Kalman[:,0], scatter_mat_no_Kalman[:,1], scatter_mat_no_Kalman[:,2])
 
         ax1.set_title(f"{count}: 3D keypoints")
         plt.draw()

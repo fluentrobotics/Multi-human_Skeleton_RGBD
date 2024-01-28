@@ -59,13 +59,13 @@ def find_centric_and_outlier(data_HKD: np.ndarray, mask_HK: np.ndarray):
     
     for idx in range(data_HKD.shape[0]):
         # find general centric then outliner
-        valid_keypoints = data_HKD[idx][mask_HK[idx],...]
+        valid_keypoints = data_HKD[idx][mask_HK[idx],...]       # [K-,3]
         
         if valid_keypoints.shape[0] == 0:
             # find all outliers
             continue
         
         else:
-            
+            cnetric = np.mean(valid_keypoints, axis=1)
             
     centric = np.mean(data_HKD, axis=1)     # [H,3]

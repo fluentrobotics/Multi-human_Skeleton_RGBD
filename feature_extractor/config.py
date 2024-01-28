@@ -49,9 +49,9 @@ DATA_DIR_PATH = PROJECT_PATH / "data"
 ###################################################################################
 
 # TODO: Changeable Parameters
-TEST_NAME = "test_Minimal_False"
+TEST_NAME = "test_Minimal_True"
 SAVE_YOLO_IMG = True
 
 # Filters
 USE_KALMAN = True
-MINIMAL_FILTER = False
+MINIMAL_FILTER = True
