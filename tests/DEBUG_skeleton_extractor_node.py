@@ -263,7 +263,9 @@ class skeletal_extractor_node():
             # query or set if non-existing
             self.human_dict.setdefault(id, HumanKeypointsFilter(id=id, 
                                                                 gaussian_blur=self.use_gaussian_blur, 
-                                                                minimal_filter=self.use_minimal_filter))
+                                                                minimal_filter=self.use_minimal_filter,
+                                                                num_keypoints=num_keypoints,
+                                                                ))
             self.human_dict[id].missing_count = 0       # reset missing_count of existing human
 
             # [K,3]
@@ -513,4 +515,6 @@ def main() -> None:
         
 
 if __name__ == '__main__':
+    if not os.path.exists(DATA_DIR_PATH / "pickle"):
+        os.mkdir(DATA_DIR_PATH / "pickle")
     main()

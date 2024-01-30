@@ -3,6 +3,7 @@ import cv2
 from feature_extractor.KalmanFilter import KalmanFilter
 from feature_extractor.utils import logger
 
+from feature_extractor.config import MAX_MISSING
 
 class HumanKeypointsFilter:
     """
@@ -16,6 +17,7 @@ class HumanKeypointsFilter:
     def __init__(self, id, 
                  gaussian_blur: bool = True,
                  minimal_filter: bool = True,
+                 num_keypoints = None,
                  ) -> None:
         """
         required: id
@@ -30,7 +32,8 @@ class HumanKeypointsFilter:
         self.gaussian_blur = gaussian_blur
         self.minimal_filter = minimal_filter
         
-        self.filters = None
+        self.filters = np.empty(num_keypoints, dtype=object)
+        self.missing_keypoints = np.zeros(num_keypoints, dtype=int)
 
     def gaussianBlur_depth(self, depth_frame: np.ndarray, kernel_size=(11,11)) -> np.ndarray:
         """
@@ -117,17 +120,39 @@ class HumanKeypointsFilter:
         K, D = raw_keypoints_cam.shape
         keypoints_filtered = np.zeros_like(raw_keypoints_cam)
         
-        if self.filters is None:
-            # init keypoint kalman filter
-            self.filters = np.empty(K, dtype=object)
-            # NOTE: need vectorization?
-            for k in range(K):
-                self.filters[k] = KalmanFilter(freq=freq)
-                self.filters[k].initialize(raw_keypoints_cam[k,...])        # raw_keypoints_cam[k] is a xyz vector
-                keypoints_filtered[k] = self.filters[k].getMeasAfterInitialize()
-        else:
-            for k in range(K):
-                keypoints_filtered[k] = self.filters[k].update(raw_keypoints_cam[k])
-        
+
+        # NOTE: need vectorization?
+        for k in range(K):
+            if self.filters[k] is None:
+                if self.valid_keypoints[k]:
+                    self.missing_keypoints[k] = 0
+                    self.filters[k] = KalmanFilter(freq=freq)
+                    self.filters[k].initialize(raw_keypoints_cam[k,...])        # raw_keypoints_cam[k] is a xyz vector
+                    keypoints_filtered[k] = self.filters[k].getMeasAfterInitialize()
+                else:
+                    self.missing_keypoints[k] += 1
+
+            else:
+                if self.valid_keypoints[k]:
+                    self.missing_keypoints[k] = 0
+                    keypoints_filtered[k] = self.filters[k].update(raw_keypoints_cam[k])
+                else:
+                    self.missing_keypoints[k] += 1
+                    keypoints_filtered[k] = self.filters[k].updateOpenLoop()
+                    if self.missing_keypoints[k] >= MAX_MISSING:
+                        self.filters[k] = None
+
         return keypoints_filtered
 
+
+    def inlier_filter(keypoints_cam: np.ndarray):
+        """
+        @ keypoints_cam: keypoints with outliers [K,3]
+
+        return @ inlier_mask: [K,] inlier is True, outlier is False
+        """
+        K, D = keypoints_cam.shape
+
+        inlier_mask = np.ones(K)
+
+        #  TODO: find the center of valid data, find idx of outliers, inlier_mask = inlier AND valid

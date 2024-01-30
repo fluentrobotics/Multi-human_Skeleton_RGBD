@@ -513,4 +513,6 @@ def main() -> None:
         
 
 if __name__ == '__main__':
+    if not os.path.exists(DATA_DIR_PATH / "pickle"):
+        os.mkdir(DATA_DIR_PATH / "pickle")
     main()

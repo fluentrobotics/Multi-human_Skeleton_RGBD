@@ -32,6 +32,10 @@ MAX_MISSING = 5
 SKELETAL_LINE_PAIRS_LIST = [(4,2),(2,0),(0,1),(1,3),
                             (10,8),(8,6),(6,5),(5,7),(7,8),
                             (6,12),(12,14),(14,16),(5,11),(11,13),(13,15),(12,11)]
+SKELETAL2BODY = np.array(["Nose", "Left Eye", "Right Eye", "Left Ear", "Right Ear",
+                          "Left Shoulder", " Right SHoulder", "Left Elbow", "Right Elbow",
+                          "Left Wrist", "Right Wrist", "Left Hip", "Right Hip",
+                          "Left Knee", "Right Knee", "Left Ankle", "Right Ankle"], dtype=str)
 SAVE_DATA = True
 
 # Pre-trained Model
