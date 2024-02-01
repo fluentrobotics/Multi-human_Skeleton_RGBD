@@ -24,4 +24,4 @@ get `.pkl` results
 
 run `plot/plot_pickle.py` and get figure demo in `data/figure`
 
-run 'plot/creat_video_from_img.py' and get video demo in 'data/video'
+run `plot/creat_video_from_img.py` and get video demo in `data/video`
