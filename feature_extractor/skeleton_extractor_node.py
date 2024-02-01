@@ -23,6 +23,7 @@ from ultralytics import YOLO
 from ultralytics.engine.results import Results
 
 from feature_extractor.HumanKeypointsFilter import HumanKeypointsFilter
+from feature_extractor.Outlier_filter import find_inliers
 from feature_extractor.utils import *
 
 # Global Config
@@ -42,7 +43,8 @@ class skeletal_extractor_node():
                  use_kalman: bool = True,
                  gaussian_blur: bool = True,
                  minimal_filter: bool = True,
-                 rviz: bool = True,
+                 outlier_filter: bool = True,
+                 rviz: bool = False,
                  save: bool = True,
     ):
         """
@@ -61,6 +63,7 @@ class skeletal_extractor_node():
         self.use_kalman = use_kalman
         self.use_gaussian_blur = gaussian_blur
         self.use_minimal_filter = minimal_filter
+        self.use_outlier_filter = outlier_filter
         self.save = save
 
         logger.info(f"\nInitialization\n rotate={self.rotate}\n \
@@ -74,6 +77,7 @@ class skeletal_extractor_node():
                     MaxMissingCount={MAX_MISSING}\n \
                     Gaussian_blur={gaussian_blur}\n \
                     Minimal_filter={minimal_filter}\n \
+                    Outlier_filter={outlier_filter}\n \
                     ")
         
         # yolov8n-pose, yolov8s-pose, yolov8m-pose, yolov8l-pose, yolov8x-pose, yolov8x-pose-p6
@@ -81,7 +85,7 @@ class skeletal_extractor_node():
         self._POSE_KEYPOINTS = 17
         self.human_dict = dict()
         self.keypoints_HKD: np.ndarray
-
+        self.step = 0
 
         # Subscriber ##########################################################
         if self.compressed['rgb']:
@@ -144,6 +148,7 @@ class skeletal_extractor_node():
         
         
         # Camera Calibration Info ################
+        logger.info("Waiting for ROS topics")
         camera_info_msg: CameraInfo = rospy.wait_for_message(
             CAMERA_INFO_TOPIC, CameraInfo, timeout=30
         )
@@ -165,11 +170,13 @@ class skeletal_extractor_node():
 
     def _skeleton_inference_and_publish(self) -> None:
 
+        self.step += 1
         if self.save:
             self.filtered_keypoints = None
             self.keypoints_mask = None
             self.keypoints_no_Kalman= None
             self.YOLO_plot = None
+        
         
         if self._rgb_msg is None or self._depth_msg is None:
             return
@@ -263,7 +270,9 @@ class skeletal_extractor_node():
             # query or set if non-existing
             self.human_dict.setdefault(id, HumanKeypointsFilter(id=id, 
                                                                 gaussian_blur=self.use_gaussian_blur, 
-                                                                minimal_filter=self.use_minimal_filter))
+                                                                minimal_filter=self.use_minimal_filter,
+                                                                num_keypoints=num_keypoints,
+                                                                ))
             self.human_dict[id].missing_count = 0       # reset missing_count of existing human
 
             # [K,3]
@@ -279,8 +288,14 @@ class skeletal_extractor_node():
             
             self.human_dict[id].keypoints_filtered = keypoints_cam
 
+            if self.use_outlier_filter:
+                # logger.debug(f"{keypoints_cam}\n{self.human_dict[id].valid_keypoints}")
+                new_mask, geo_center = find_inliers(data_KD=keypoints_cam, mask_K= self.human_dict[id].valid_keypoints)
+            else:
+                new_mask = self.human_dict[id].valid_keypoints
+            
             keypoints_3d[idx,...] = keypoints_cam     # [K,3]
-            keypoints_mask[idx,...] = self.human_dict[id].valid_keypoints
+            keypoints_mask[idx,...] = new_mask
             # id_human[idx] = id
             # keypoints_xx[idx] = corelated data
         
@@ -439,6 +454,7 @@ def main() -> None:
                                    pose_model=POSE_MODEL,
                                    use_kalman=USE_KALMAN, 
                                    minimal_filter=MINIMAL_FILTER,
+                                   outlier_filter=OUTLIER_FILTER,
                                    rviz=RVIZ_VIS,
                                    save=SAVE_DATA,
                                    )
