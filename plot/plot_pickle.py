@@ -90,19 +90,23 @@ def main():
     ax4.axes.set_zlim3d(1,4) 
     ax4.set_zlabel('Depth-axis')
 
-    sc1 = ax1.scatter(0, 0, 0, color='r', label='Kalman')
+    sc1 = ax1.scatter(0, 0, 0, color='r', label='Kalman + Inlier')
     sc2 = ax2.scatter(0, 0, 0, color='b', label='no Kalman')
-    sc3 = ax3.scatter(0, 0, 0, color='r', label='Kalman')
+    sc3 = ax3.scatter(0, 0, 0, color='r', label='Kalman + Inlier')
     sc4 = ax4.scatter(0, 0, 0, color='b', label='no Kalman')
 
     # view position
     ax1.view_init(elev=-60, azim=-90)
+    ax1.set_title('Front View', fontstyle='italic')
     ax1.legend()
     ax2.view_init(elev=-60, azim=-90)
+    ax2.set_title('Front View', fontstyle='italic')
     ax2.legend()
     ax3.view_init(elev=-15, azim=-90)
+    ax3.set_title('Top View', fontstyle='italic')
     ax3.legend()
     ax4.view_init(elev=-15, azim=-90)
+    ax4.set_title('Top View', fontstyle='italic')
     ax4.legend()
 
 
@@ -161,5 +165,5 @@ def main():
         
 
 if __name__ == "__main__":
-
+    
     main()

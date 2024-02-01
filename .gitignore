@@ -4,7 +4,8 @@
 **/poetry.lock
 **/*.pt
 **/*.bag
-**/img/**
-**/bagfiles/**
+**/bagfiles
 **/.pkl
-**/data/**
+**/data
+**/.vscode
+**/**.ipynb
