@@ -52,10 +52,11 @@ PROJECT_PATH = get_project_dir_path()
 DATA_DIR_PATH = PROJECT_PATH / "data"
 ###################################################################################
 
-# TODO: Changeable Parameters
+# TODO: Cutomized Parameters
 TEST_NAME = "test_Minimal_True"
 SAVE_YOLO_IMG = True
 
 # Filters
 USE_KALMAN = True
 MINIMAL_FILTER = True
+OUTLIER_FILTER = True

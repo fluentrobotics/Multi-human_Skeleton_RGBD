@@ -140,19 +140,8 @@ class HumanKeypointsFilter:
                     self.missing_keypoints[k] += 1
                     keypoints_filtered[k] = self.filters[k].updateOpenLoop()
                     if self.missing_keypoints[k] >= MAX_MISSING:
+                        # logger.warning("Skeleton {k} disappears")
                         self.filters[k] = None
 
         return keypoints_filtered
 
-
-    def inlier_filter(keypoints_cam: np.ndarray):
-        """
-        @ keypoints_cam: keypoints with outliers [K,3]
-
-        return @ inlier_mask: [K,] inlier is True, outlier is False
-        """
-        K, D = keypoints_cam.shape
-
-        inlier_mask = np.ones(K)
-
-        #  TODO: find the center of valid data, find idx of outliers, inlier_mask = inlier AND valid

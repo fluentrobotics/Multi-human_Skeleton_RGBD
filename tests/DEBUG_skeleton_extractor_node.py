@@ -81,7 +81,7 @@ class skeletal_extractor_node():
         self._POSE_KEYPOINTS = 17
         self.human_dict = dict()
         self.keypoints_HKD: np.ndarray
-
+        self.step = 0
 
         # Subscriber ##########################################################
         if self.compressed['rgb']:
@@ -165,11 +165,13 @@ class skeletal_extractor_node():
 
     def _skeleton_inference_and_publish(self) -> None:
 
+        self.step += 1
         if self.save:
             self.filtered_keypoints = None
             self.keypoints_mask = None
             self.keypoints_no_Kalman= None
             self.YOLO_plot = None
+        
         
         if self._rgb_msg is None or self._depth_msg is None:
             return
