@@ -4,7 +4,7 @@ Efficient multi-human 3D skeleton tracking based on RealSenese RGBD
 DEMO
 ![image](/doc/test_Outliers_True_fig154.png)
 
-### dependency version
+## dependency version
 
 Python 3.10
 
@@ -13,7 +13,7 @@ numpy, ultralytics, torch, opencv-python
 Details in [pyproject.toml](/pyproject.toml)
 
 
-### Get started
+## Get started
 Set Parameters(TASK NAME and selected filter) in global config file [config.py](/feature_extractor/config.py)
 
 run `feature_extractor/skeleton_extractor_node.py`
