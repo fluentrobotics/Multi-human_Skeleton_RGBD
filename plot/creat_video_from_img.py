@@ -1,3 +1,6 @@
+import glob
+import re
+
 import cv2
 import numpy as np
 from pathlib import Path
@@ -13,12 +16,20 @@ video_path = video_path.absolute().as_posix() + "_video.mp4"
 img_array = []
 fourcc = cv2.VideoWriter_fourcc(*'mp4v')
 
-count_max = 319
-for id in tqdm(range(count_max+1),
+pattern = f"{fig_path}*.png"
+files = glob.glob(pattern)
+
+def extract_number(filename):
+    match = re.search(r"(\d+)\.png$", filename)
+    return int(match.group(1)) if match else 0
+
+files_sorted = sorted(files, key=extract_number)
+
+for filename in tqdm(files_sorted,
                ncols=80,
                colour="red",
                ):
-    filename = f"{fig_path}{id}.png"
+    
     img = cv2.imread(filename)
     if img is None:
         continue
