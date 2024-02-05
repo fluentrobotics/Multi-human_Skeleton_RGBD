@@ -2,9 +2,11 @@
 Efficient multi-human 3D skeleton tracking based on RealSenese RGBD
 
 DEMO
-<img src="/doc/test_Outliers_True_fig154.png" width="250"/>
-![image](/doc/test_Outliers_True_fig154.png =250x)
-![image](/doc/test_Outliers_True_ani.gif)
+
+<img src="/doc/test_Outliers_True_fig154.png" width="500"/>
+<!-- ![image](/doc/test_Outliers_True_fig154.png =250x) -->
+<img src="/doc/test_Outliers_True_ani.gif" width="500"/>
+<!-- ![image](/doc/test_Outliers_True_ani.gif) -->
 
 
 ## Dependency Version
