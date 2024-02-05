@@ -25,11 +25,12 @@ def extract_number(filename):
 
 files_sorted = sorted(files, key=extract_number)
 
-with imageio.get_writer(gif_path, mode="I", duration=0.3) as writer:
+with imageio.get_writer(gif_path, mode="I", fps=PUB_FREQ) as writer:
     for filename in tqdm(files_sorted,
                 ncols=80,
                 colour="red",
                 ):
         image = imageio.imread(filename)
-        print(type(image))
-    
+        writer.append_data(image)
+
+print(f"Done! GIF path: {gif_path}")

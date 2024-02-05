@@ -56,6 +56,7 @@ DATA_DIR_PATH = PROJECT_PATH / "data"
 # TEST_NAME = "test_Minimal_True"
 TEST_NAME = "test_Outliers_True"
 SAVE_YOLO_IMG = True
+DEMO_TYPE = 'gif'
 
 # Filters
 USE_KALMAN = True
