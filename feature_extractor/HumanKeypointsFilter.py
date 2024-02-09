@@ -1,5 +1,6 @@
 import numpy as np
 import cv2
+from typing import Optional
 from feature_extractor.KalmanFilter import KalmanFilter
 from feature_extractor.utils import logger
 
@@ -24,9 +25,9 @@ class HumanKeypointsFilter:
         optional: gaussian_blur, minimal_filter
         """
         self.id = id
-        self.keypoints_filtered: np.ndarray = None              # 3D keypoints [K,3]
+        self.keypoints_filtered: np.ndarray | None = None               # 3D keypoints [K,3]
         self.missing_count: int = 0
-        self.valid_keypoints: np.ndarray                        # valid keypoint mask
+        self.valid_keypoints: np.ndarray                                # valid keypoint mask
         
         
         self.gaussian_blur = gaussian_blur
