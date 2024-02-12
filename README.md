@@ -40,3 +40,9 @@ NOTE: The opencv and matplotlib might conflict because of PyQt5 and cause dump c
 
 ## License
 ultralytics YOLO v8 requires all the following repository with [**GNU AGPLv3**](/LICENSE).
+
+
+## What's Next
+* ROS2 dev, Real-time deployment on robot and calibration with multi-view pseudo ground true.
+* Descriptor and Feature
+* Action prediction based motion planning.
