@@ -1,3 +1,5 @@
+# REF: https://github.com/SamueleSandrini/skeleton_trajectory/blob/master/src/KalmanFilter.py
+
 import numpy as np
 from numpy.linalg import multi_dot
 

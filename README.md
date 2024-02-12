@@ -1,7 +1,10 @@
-# Multi-human_Skeleton_RGB-D
-Efficient multi-human 3D skeleton tracking based on RealSenese RGBD
+# 3D Multi-human Skeleton with RGB-D
 
-DEMO
+This repository aims to develop an `Efficient 3D multi-human pose estimation`. Inference efficiency is about 20 Hz with Nvidia A2000. We starts from the RGB-D ROS image/compressed image to the 3D keypoint representation in the camera coordinate.
+
+Feel free to choose any filter you want to compare the their performace.
+
+## DEMO
 
 <img src="/doc/test_Outliers_True_fig154.png" width="500"/>
 
