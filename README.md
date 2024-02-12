@@ -32,4 +32,11 @@ You can modify YOLO-POSE model `POSE_MODEL`, filters `USE_KALMAN` `MINIMAL_FILTE
 
 3. The results will be saved in `data/piclke` as `.pkl` with `TASK_NAME`.
 
-4. If you want to generate a demo, run `plot/plot_pickle.py` and you will get Matplotlib figures generated in `data/figure`. Then run `plot/creat_video_from_img.py` and get video demo in `data/video`. NOTE: The opencv and matplotlib might conflict because of PyQt5 and cause dump conflicts, try to avoid `import` them in the same PID.
+4. If you want to generate a demo, run `plot/plot_pickle.py` and you will get Matplotlib figures generated in `data/figure`. 
+
+5. Then run `plot/creat_video_from_img.py` and get video demo in `data/video`. Before generate the video, you can select desired frame interval in `config`. 
+NOTE: The opencv and matplotlib might conflict because of PyQt5 and cause dump conflicts, try to avoid `import` them in the same PID.
+
+
+## License
+ultralytics YOLO v8 requires all the following repository with [**GNU AGPLv3**](/LICENSE).
