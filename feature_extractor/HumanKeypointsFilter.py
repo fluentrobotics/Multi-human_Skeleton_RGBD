@@ -72,7 +72,7 @@ class HumanKeypointsFilter:
     def align_depth_with_color(self, keypoints_2d, depth_frame, intrinsic_mat, rotate = cv2.ROTATE_90_CLOCKWISE):
         """
         @keypoints_2d: [K, 3(x,y,conf)]. x=y=0.00 with low conf means the keypoint does not exist
-        @depth_frame: []
+        @depth_frame: []    default size (720,1280)
         @intrinsic_mat: cameara intrinsic K
         @rotate = 0 | None
         
@@ -84,17 +84,24 @@ class HumanKeypointsFilter:
         valid_xy = keypoints_2d[:,:2] != 0.00        # bool [K,2]
         self.valid_keypoints = valid_xy[:,0] & valid_xy[:,1]        # bool vector [K,]
         self.valid_keypoints = self.valid_keypoints.astype(bool)
+
+        M, N = depth_frame.shape
         # logger.debug(f"\nkeypoint mask:\n{self.valid_keypoints}")
         # logger.debug(f"\nkeypoint:\n{keypoints_2d}")
         # convert keypoints to the original coordinate
         if rotate == cv2.ROTATE_90_CLOCKWISE:
             axis_0 = depth_frame.shape[0]-1 - keypoints_2d[:, 0:1]  # vector [K,1], -1 to within the idx range
-            axis_1 = keypoints_2d[:, 1:2]                           # vector [K,1]
-
+            axis_1 = keypoints_2d[:, 1:2]-1                         # vector [K,1]
         else:
             # no ratation
-            axis_0 = keypoints_2d[:, 1:2]
-            axis_1 = keypoints_2d[:, 0:1]
+            axis_0 = keypoints_2d[:, 1:2]-1
+            axis_1 = keypoints_2d[:, 0:1]-1
+        
+        # fix boundary data with figure size
+        axis_0 = np.maximum(axis_0, 0)
+        axis_0 = np.minimum(axis_0, M-1)
+        axis_1 = np.maximum(axis_1, 0)
+        axis_1 = np.minimum(axis_1, N-1)
         
         axis_2 = np.ones_like(axis_0)
 

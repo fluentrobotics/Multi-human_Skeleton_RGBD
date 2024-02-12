@@ -36,7 +36,6 @@ SKELETAL2BODY = np.array(["Nose", "Left Eye", "Right Eye", "Left Ear", "Right Ea
                           "Left Shoulder", " Right SHoulder", "Left Elbow", "Right Elbow",
                           "Left Wrist", "Right Wrist", "Left Hip", "Right Hip",
                           "Left Knee", "Right Knee", "Left Ankle", "Right Ankle"], dtype=str)
-SAVE_DATA = True
 
 # Pre-trained Model
 POSE_MODEL = 'yolov8m-pose.pt'
@@ -54,7 +53,8 @@ DATA_DIR_PATH = PROJECT_PATH / "data"
 
 # TODO: Cutomized Parameters
 # TEST_NAME = "test_Minimal_True"
-TEST_NAME = "test_Outliers_True"
+TEST_NAME = "Multi_Human2"
+SAVE_DATA = True
 SAVE_YOLO_IMG = True
 DEMO_TYPE = 'gif'
 
@@ -62,3 +62,8 @@ DEMO_TYPE = 'gif'
 USE_KALMAN = True
 MINIMAL_FILTER = True
 OUTLIER_FILTER = True
+
+# Plot and Video
+SELECTED_VIDEO_REGION = True
+VIDEO_START = 70
+VIDEO_END = 170

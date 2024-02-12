@@ -7,7 +7,7 @@ DEMO
 
 GIF
 
-<img src="/doc/test_Outliers_True_ani.gif" width="500"/>
+<img src="/doc/Multi_Human2_ani.gif" width="500"/>
 
 <!-- ![image](/doc/test_Outliers_True_fig154.png =250x) -->
 

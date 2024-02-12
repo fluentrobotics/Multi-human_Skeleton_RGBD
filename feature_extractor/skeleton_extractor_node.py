@@ -1,3 +1,5 @@
+# Multi-human_Skeleton_RGB-D the fluent robotics lab, AGPL-3.0 license
+
 """Extract images and publish skeletons.
 """
 import os

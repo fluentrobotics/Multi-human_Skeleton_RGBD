@@ -25,12 +25,18 @@ def extract_number(filename):
 
 files_sorted = sorted(files, key=extract_number)
 
-with imageio.get_writer(gif_path, mode="I", fps=PUB_FREQ) as writer:
+step = 0
+
+with imageio.get_writer(gif_path, mode="I", fps=PUB_FREQ, loop=0) as writer:
     for filename in tqdm(files_sorted,
                 ncols=80,
                 colour="red",
                 ):
-        image = imageio.imread(filename)
-        writer.append_data(image)
+        
+        if (step >= VIDEO_START and step <= VIDEO_END) and SELECTED_VIDEO_REGION:
+            image = imageio.imread(filename)
+            writer.append_data(image)
+        
+        step += 1
 
 print(f"Done! GIF path: {gif_path}")

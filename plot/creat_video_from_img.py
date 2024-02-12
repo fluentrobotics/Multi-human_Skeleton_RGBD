@@ -25,17 +25,23 @@ def extract_number(filename):
 
 files_sorted = sorted(files, key=extract_number)
 
+
+step = 0
+
 for filename in tqdm(files_sorted,
                ncols=80,
                colour="red",
                ):
     
-    img = cv2.imread(filename)
-    if img is None:
-        continue
-    height, width, layers = img.shape
-    size = (width,height)
-    img_array.append(img)
+    if (step >= VIDEO_START and step <= VIDEO_END) and SELECTED_VIDEO_REGION:
+        img = cv2.imread(filename)
+        if img is None:
+            continue
+        height, width, layers = img.shape
+        size = (width,height)
+        img_array.append(img)
+    
+    step += 1
     # print(id)
     
 out = cv2.VideoWriter(video_path, fourcc, PUB_FREQ, size)

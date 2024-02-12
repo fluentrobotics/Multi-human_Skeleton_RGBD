@@ -17,7 +17,7 @@ model = YOLO('/home/xmo/socialnav_xmo/feature_extractor/models/yolov8m-pose.pt')
 def main():
     """Extract a folder of images from a rosbag.
     """
-    bag_file = "/home/xmo/socialnav_xmo/feature_extractor/bagfiles/multi_human_video.bag"
+    bag_file = "/home/xmo/socialnav_xmo/feature_extractor/bagfiles/multiHuman2.bag"
     image_topic = "/camera/color/image_raw/compressed"
     # output_dir = "/home/xmo/bagfiles/extract/"
 

@@ -1,13 +1,9 @@
-
-# fun: get_pose_model_dir
 from pathlib import Path
 import sys
 from loguru import logger
-
-# fun: time logger
 from typing import Optional
 import time
-
+import os
 import numpy as np
 
 def get_project_dir_path() -> Path:
@@ -44,3 +40,15 @@ def time_logger(pre: float | None = None) -> float | None:
     else:
         logger.info(f"It took {cur-pre} seconds")
         return None
+
+
+def delete_files_in_directory(directory_path):
+    try:
+        files = os.listdir(directory_path)
+        for file in files:
+            file_path = os.path.join(directory_path, file)
+            if os.path.isfile(file_path):
+                os.remove(file_path)
+        logger.info("Delete all files in the folder successfully.")
+    except OSError:
+        logger.warning("Error occurred while deleting files.")
