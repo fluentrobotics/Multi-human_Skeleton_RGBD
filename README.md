@@ -1,6 +1,6 @@
 # 3D Multi-human Skeleton with RGB-D
 
-This repository aims to develop an `Efficient 3D multi-human pose estimation`. Inference efficiency is about 20 Hz with Nvidia A2000. We starts from the RGB-D ROS image/compressed image to the 3D keypoint representation in the camera coordinate.
+This repository aims to develop an Efficient 3D Multi-human Pose Estimation. Inference efficiency is about 20 Hz with Nvidia A2000. We starts from the RGB-D ROS image/compressed image to the 3D keypoint representation in the camera coordinate.
 
 Feel free to choose any filter you want to compare the their performace.
 
