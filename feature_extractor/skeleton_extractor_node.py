@@ -3,6 +3,7 @@
 """Extract images and publish skeletons.
 """
 import os
+import threading
 import argparse
 import cv2
 import pickle
@@ -10,10 +11,13 @@ import numpy as np
 from typing import Optional, TypedDict
 from pathlib import Path
 
-import rosbag
-import rospy
-import message_filters
-from rospy.numpy_msg import numpy_msg
+# import rosbag
+import rclpy
+from rclpy.node import Node
+# import message_filters
+# from rospy.numpy_msg import numpy_msg
+
+# Message type
 from std_msgs.msg import Int32MultiArray, Float32MultiArray, Header, ColorRGBA, MultiArrayDimension
 from geometry_msgs.msg import PoseArray, Pose, Quaternion, Point, PointStamped
 from visualization_msgs.msg import Marker, MarkerArray
@@ -36,7 +40,7 @@ bridge = CvBridge()
 
 
 
-class skeletal_extractor_node():
+class skeletal_extractor_node(Node):
     def __init__(self, 
                  rotate: int = cv2.ROTATE_90_CLOCKWISE, 
                  compressed: dict = {'rgb': True, 'depth': False}, 
@@ -57,6 +61,7 @@ class skeletal_extractor_node():
         @use_kalman: Kalman Filter, default = True
         @rviz: RViz to show skeletal keypoints and lines
         """
+        super().__init__("skeletal_extractor_node")
         self.rotate = rotate        # rotate: rotate for yolov8 then rotate inversely   
         # ROTATE_90_CLOCKWISE=0, ROTATE_180=1, ROTATE_90_COUNTERCLOCKWISE=2 
         self.compressed = compressed
@@ -91,51 +96,54 @@ class skeletal_extractor_node():
 
         # Subscriber ##########################################################
         if self.compressed['rgb']:
-            self._rgb_sub = rospy.Subscriber(
-                COLOR_COMPRESSED_FRAME_TOPIC, CompressedImage, self._rgb_callback, queue_size=1
+            self._rgb_sub = self.create_subscription(
+                CompressedImage, COLOR_COMPRESSED_FRAME_TOPIC, self._rgb_callback, 1
             )
             self._rgb_msg: CompressedImage = None
         else:
-            self._rgb_sub = rospy.Subscriber(
-                COLOR_FRAME_TOPIC, Image, self._rgb_callback, queue_size=1
+            self._rgb_sub = self.create_subscription(
+                Image, COLOR_FRAME_TOPIC, self._rgb_callback, 1
             )
             self._rgb_msg: Image = None
         if self.compressed['depth']:
-            self._depth_sub = rospy.Subscriber(
-            DEPTH_ALIGNED_COMPRESSED_TOPIC, CompressedImage, self._depth_callback, queue_size=1
+            self._depth_sub = self.create_subscription(
+            CompressedImage, DEPTH_ALIGNED_COMPRESSED_TOPIC, self._depth_callback, 1
         )
             self._depth_msg: CompressedImage = None
-            
         else:
-            self._depth_sub = rospy.Subscriber(
-            DEPTH_ALIGNED_TOPIC, Image, self._depth_callback, queue_size=1
+            self._depth_sub = self.create_subscription(
+            Image, DEPTH_ALIGNED_TOPIC, self._depth_callback, 1
         )
             self._depth_msg: Image = None
             
-        
+
+
+        # Timer for Publisher ################################################
+        timer_period = 1/PUB_FREQ    
+        self.pub_timer = self.create_timer(timer_period, self._timer_callback)
+
         # Publisher ###########################################################     
         # TODO: verify the msg type
-        self._skeleton_human_id_pub = rospy.Publisher(
-            SKELETON_HUMAN_ID_TOPIC, numpy_msg(Int32MultiArray), queue_size=1
+        self._skeleton_human_id_pub = self.create_publisher(
+            Int32MultiArray, SKELETON_HUMAN_ID_TOPIC, 1
         )
-        self._skeleton_mask_mat_pub = rospy.Publisher(
-            SKELETON_MASK_MAT_TOPIC, numpy_msg(Int32MultiArray), queue_size=1
+        self._skeleton_mask_mat_pub = self.create_publisher(
+            Int32MultiArray, SKELETON_MASK_MAT_TOPIC, 1
         )
-        self._raw_skeleton_pub = rospy.Publisher(
-            RAW_SKELETON_TOPIC, numpy_msg(Float32MultiArray), queue_size=1
+        self._raw_skeleton_pub = self.create_publisher(
+            Float32MultiArray, RAW_SKELETON_TOPIC, 1
         )
-        self._filtered_skeleton_pub = rospy.Publisher(
-            FILTERED_SKELETON_TOPIC, numpy_msg(Float32MultiArray), queue_size=1
+        self._filtered_skeleton_pub = self.create_publisher(
+            Float32MultiArray, FILTERED_SKELETON_TOPIC, 1
         )
 
-
-        # RViz ####################################################
+        # RViz Skeletons ####################################################
         if self.rviz:
-            self._rviz_keypoints_img2d_pub = rospy.Publisher(
-                RVIZ_IMG2D_SKELETON_TOPIC, Image, queue_size=1
+            self._rviz_keypoints_img2d_pub = self.create_publisher(
+                Image, RVIZ_IMG2D_SKELETON_TOPIC, 1
             )
-            self._rviz_keypoints_marker3d_pub = rospy.Publisher(
-                RVIZ_MARKER3D_SKELETON_TOPIC, MarkerArray, queue_size=1
+            self._rviz_keypoints_marker3d_pub = self.create_publisher(
+                MarkerArray, RVIZ_MARKER3D_SKELETON_TOPIC, 1
             )
         
         if self.save:
@@ -148,27 +156,46 @@ class skeletal_extractor_node():
 
         # #####################################################################
         
-        
-        # Camera Calibration Info ################
-        logger.info("Waiting for ROS topics")
-        camera_info_msg: CameraInfo = rospy.wait_for_message(
-            CAMERA_INFO_TOPIC, CameraInfo, timeout=30
-        )
-        self._intrinsic_matrix = np.array(camera_info_msg.K).reshape(3,3)
-        logger.info(f"\nCamera Intrinsic Matrix:\n{self._intrinsic_matrix}")
-        # ########################################
-        
 
+        # Camera Calibration Info Subscriber ##################################
+        self.receive_from_camera: bool = False
+        self.waiting_cam_count: int = 0
+        self._cam_info_sub = self.create_subscription(CameraInfo, CAMERA_INFO_TOPIC, self._cam_info_callback)
+
+        self._msg_lock = threading.Lock()   # lock the data resource
+        self._reset_sub_msg()
+        # #####################################################################
+        
+    def _timer_callback(self) -> None:
+        if self.receive_from_camera is True:
+            self._skeleton_inference_and_publish()
+        else:
+            self.waiting_cam_count += 1
+            if self.waiting_cam_count % 20 == 0:
+                logger.warning(f"waiting for camera information, {self.waiting_cam_count // 20}")
+
+            # wait too long
+            # if self.waiting_cam_count >= 400:
+            #     sys.exit()
 
     def _rgb_callback(self, msg: Image | CompressedImage) -> None:
-        self._rgb_msg = msg
+        with self._msg_lock:
+            self._rgb_msg = msg
 
     def _depth_callback(self, msg: Image | CompressedImage) -> None:
-        self._depth_msg = msg
+        with self._msg_lock:
+            self._depth_msg = msg
+
+    def _cam_info_callback(self, msg: CameraInfo) -> None:
+        if self.receive_from_camera is False:
+            self.receive_from_camera = True
+            self._intrinsic_matrix = np.array(msg.K).reshape(3,3)
+            logger.info(f"\nCamera Intrinsic Matrix:\n{self._intrinsic_matrix}")
 
     def _reset_sub_msg(self):
-        self._rgb_msg = None
-        self._depth_msg = None
+        with self._msg_lock:
+            self._rgb_msg = None
+            self._depth_msg = None
 
     def _skeleton_inference_and_publish(self) -> None:
 
@@ -221,7 +248,6 @@ class skeletal_extractor_node():
             self._rviz_keypoints_img2d_pub.publish(rviz_keypoint_2d_img)
             all_marker_list = []
 
-        
         if self.save:
             # video
             self.YOLO_plot = yolo_plot
@@ -251,6 +277,7 @@ class skeletal_extractor_node():
 
         
         # delele missing pedestrians
+        del_list = []
         for key, value in list(self.human_dict.items()):
             value.missing_count += 1
             if value.missing_count > MAX_MISSING:
