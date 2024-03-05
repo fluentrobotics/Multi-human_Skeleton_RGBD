@@ -30,6 +30,7 @@ from ultralytics.engine.results import Results
 
 from feature_extractor.HumanKeypointsFilter import HumanKeypointsFilter
 from feature_extractor.Outlier_filter import find_inliers
+from feature_extractor.rviz2_maker import *
 from feature_extractor.utils import *
 
 # Global Config
@@ -61,7 +62,7 @@ class skeletal_extractor_node(Node):
         @use_kalman: Kalman Filter, default = True
         @rviz: RViz to show skeletal keypoints and lines
         """
-        super().__init__("skeletal_extractor_node")
+        super().__init__(SKELETON_NODE)
         self.rotate = rotate        # rotate: rotate for yolov8 then rotate inversely   
         # ROTATE_90_CLOCKWISE=0, ROTATE_180=1, ROTATE_90_COUNTERCLOCKWISE=2 
         self.compressed = compressed
@@ -122,20 +123,20 @@ class skeletal_extractor_node(Node):
         timer_period = 1/PUB_FREQ    
         self.pub_timer = self.create_timer(timer_period, self._timer_callback)
 
-        # Publisher ###########################################################     
-        # TODO: verify the msg type
-        self._skeleton_human_id_pub = self.create_publisher(
-            Int32MultiArray, SKELETON_HUMAN_ID_TOPIC, 1
-        )
-        self._skeleton_mask_mat_pub = self.create_publisher(
-            Int32MultiArray, SKELETON_MASK_MAT_TOPIC, 1
-        )
-        self._raw_skeleton_pub = self.create_publisher(
-            Float32MultiArray, RAW_SKELETON_TOPIC, 1
-        )
-        self._filtered_skeleton_pub = self.create_publisher(
-            Float32MultiArray, FILTERED_SKELETON_TOPIC, 1
-        )
+        # Publisher ###########################################################   
+        # # TODO: now we only publish RViz first
+        # self._skeleton_human_id_pub = self.create_publisher(
+        #     Int32MultiArray, SKELETON_HUMAN_ID_TOPIC, 1
+        # )
+        # self._skeleton_mask_mat_pub = self.create_publisher(
+        #     Int32MultiArray, SKELETON_MASK_MAT_TOPIC, 1
+        # )
+        # self._raw_skeleton_pub = self.create_publisher(
+        #     Float32MultiArray, RAW_SKELETON_TOPIC, 1
+        # )
+        # self._filtered_skeleton_pub = self.create_publisher(
+        #     Float32MultiArray, FILTERED_SKELETON_TOPIC, 1
+        # )
 
         # RViz Skeletons ####################################################
         if self.rviz:
@@ -269,7 +270,7 @@ class skeletal_extractor_node(Node):
         keypoints_2d = yolo_res.keypoints.data.cpu().numpy()          # Tensor [H,K,D(x,y,conf)] [H, 17, 3]
 
         conf_boxes = yolo_res.boxes.conf.cpu().numpy()                # Tensor [H,]
-        id_human = id_human.cpu().numpy().astype(ID_TYPE)             # Tensor
+        id_human = id_human.cpu().numpy().astype(ID_TYPE)             # Tensor [H,]
 
 
         # TODO: warning if too many human in the dictionary
@@ -278,17 +279,21 @@ class skeletal_extractor_node(Node):
         
         # delele missing pedestrians
         del_list = []
-        for key, value in list(self.human_dict.items()):
-            value.missing_count += 1
-            if value.missing_count > MAX_MISSING:
-                self.human_dict[key] = None
-                del self.human_dict[key]
-                # python memory management system will release deleted space in the future
-                
-                # RVIZ ####################################################
-                if self.rviz:
-                    delete_list = delete_human_marker(key, offset_list=[KEYPOINT_ID_OFFSET, LINE_ID_OFFSET])
-                    all_marker_list.extend(delete_list)
+        for key in self.human_dict.keys:
+            self.human_dict[key].missing_count += 1
+            if self.human_dict[key].missing_count > MAX_MISSING:
+                del_list.append(key)
+
+        for key in del_list:
+            logger.debug(f"DEL human_{key}")
+            self.human_dict[key] = None
+            del self.human_dict[key]
+            # python memory management system will release deleted space in the future
+            
+            # RVIZ ####################################################
+            if self.rviz:
+                delete_list = delete_human_marker(key, offset_list=[KEYPOINT_ID_OFFSET, LINE_ID_OFFSET])
+                all_marker_list.extend(delete_list)
 
 
         keypoints_3d = np.zeros((num_human, num_keypoints, 3))  # [H,K,3]
@@ -368,175 +373,71 @@ class skeletal_extractor_node(Node):
             
         self._reset_sub_msg()   # if no new sub msg, pause this fun
 
-##############################################################################################
-# RVIZ visualization function ################################################################
-def add_human_skeletal_keypoint_Marker(human_id: ID_TYPE, 
-                                       keypoint_KD: np.ndarray,
-                                       keypoint_mask_K: np.ndarray, 
-                                       frame_id = "skeleton_frame",
-                                       ns = "skeleton",
-                                       offset = KEYPOINT_ID_OFFSET,
-                                       ) -> Marker:
-    """
-    @human_id: ID_TYPE(np.int32)
-    @keypoint_KD: [K,3]
-    @keypoint_mask_K: [K,]
-
-    return single human skeletal points MarkerArray
-    """
-    
-    marker = Marker()
-    marker.header.frame_id = frame_id
-    # marker.header.stamp = rospy.Time.now()
-    marker.ns = ns
-    marker.id = human_id * HUMAN_MARKER_ID_VOL + offset     # 0 * 10 + 0
-    marker.type = Marker.SPHERE_LIST
-    marker.action = Marker.ADD
-    marker.scale.x = 0.05
-    marker.scale.y = 0.05
-    marker.scale.z = 0.05
-    marker.pose.orientation.x = 0.0
-    marker.pose.orientation.y = 0.0
-    marker.pose.orientation.z = 0.0
-    marker.pose.orientation.w = 1.0
-
-    marker.color = ColorRGBA(1.0, 0.0, 0.0, 1.0)
-    
-    K, D = keypoint_KD.shape
-    for keypoint_id in range(K):
-        if keypoint_mask_K[keypoint_id]:
-            marker_point = Point(keypoint_KD[keypoint_id, 0], keypoint_KD[keypoint_id, 1], keypoint_KD[keypoint_id, 2])
-            marker.points.append(marker_point)
-
-    return marker
 
 
-def add_human_skeletal_line_Marker(human_id: ID_TYPE, 
-                                   keypoint_KD: np.ndarray,
-                                   keypoint_mask_K: np.ndarray,
-                                   frame_id = "skeleton_frame",
-                                   ns = "skeleton",
-                                   offset = LINE_ID_OFFSET) -> Marker:
-    """
-    @human_id: ID_TYPE(np.int32)
-    @keypoint_KD: [K,3]
-    @keypoint_mask_K: [K,]
+def main(args=None) -> None:
 
-    return single human skeletal lines MarkerArray
-    """
-    K, D = keypoint_KD.shape
-    include_list = np.arange(K)[keypoint_mask_K].astype(np.int32)
-    filtered_list = [pair for pair in SKELETAL_LINE_PAIRS_LIST 
-                     if pair[0] in include_list and pair[1] in include_list]
-
-    marker = Marker()
-    marker.header.frame_id = frame_id
-    marker.ns = ns
-    marker.id = human_id * HUMAN_MARKER_ID_VOL + offset
-    marker.type = Marker.LINE_LIST
-    marker.action = Marker.ADD
-    marker.scale.x = 0.02
-    marker.color = ColorRGBA(0.0, 1.0, 0.0, 1.0)
-
-    for valid_pair in filtered_list:
-        start_pos = Point(keypoint_KD[valid_pair[0],0], 
-                          keypoint_KD[valid_pair[0],1],
-                          keypoint_KD[valid_pair[0],2])
-        
-        end_pos = Point(keypoint_KD[valid_pair[1],0], 
-                        keypoint_KD[valid_pair[1],1],
-                        keypoint_KD[valid_pair[1],2])
-        
-        marker.points.extend([start_pos, end_pos])
-
-    return marker
-        
-
-def delete_human_marker(human_id: ID_TYPE,
-                        frame_id = "skeleton_frame",
-                        ns = "skeleton",
-                        offset_list: list = [KEYPOINT_ID_OFFSET, LINE_ID_OFFSET]
-                        ) -> list[Marker]:
-    
-    remove_list: list[Marker] = []
-    for offset in offset_list:
-        marker = Marker()
-        marker.header.frame_id = frame_id
-        marker.ns = ns
-        marker.id = human_id * HUMAN_MARKER_ID_VOL + offset
-        marker.action = Marker.DELETE
-        marker.color.a = 0.0
-        
-        remove_list.append(marker)
-    
-    return remove_list
-        
-##############################################################################################
-##############################################################################################
-
-
-
-def main() -> None:
-
-    rospy.init_node(SKELETON_NODE)
+    rclpy.init(args=args)
     node = skeletal_extractor_node(compressed=COMPRESSED_TOPICS,
                                    pose_model=POSE_MODEL,
-                                   use_kalman=USE_KALMAN, 
+                                   use_kalman=USE_KALMAN,
                                    minimal_filter=MINIMAL_FILTER,
                                    outlier_filter=OUTLIER_FILTER,
                                    rviz=RVIZ_VIS,
                                    save=SAVE_DATA,
                                    )
     
-    logger.success("Skeleton Node initialized")
+    logger.success(f"{SKELETON_NODE} Node initialized")
+    rclpy.spin(node)
 
-    # record data
-    keypoints_list = []
-    mask_list = []
-    keypoints_no_Kalman_list = []
-    YOLO_plot_list = []
+    # # record data
+    # if SAVE_DATA:
+    #     keypoints_list = []
+    #     mask_list = []
+    #     keypoints_no_Kalman_list = []
+    #     YOLO_plot_list = []
 
-    while not rospy.is_shutdown():
+    # while not rospy.is_shutdown():
         
-        node._skeleton_inference_and_publish()
+    #     node._skeleton_inference_and_publish()
 
-        if node.save:
-            # record data
-            keypoints_list.append(node.filtered_keypoints)                  # List[np.ndarray]
-            mask_list.append(node.keypoints_mask)                           # List[np.ndarray]
-            keypoints_no_Kalman_list.append(node.keypoints_no_Kalman)       # List[np.ndarray]
-            YOLO_plot_list.append(node.YOLO_plot)                           # List[np.ndarray]
-            # logger.info(f"recording length: {len(mask_list)}")
+    #     if node.save:
+    #         # record data
+    #         keypoints_list.append(node.filtered_keypoints)                  # List[np.ndarray]
+    #         mask_list.append(node.keypoints_mask)                           # List[np.ndarray]
+    #         keypoints_no_Kalman_list.append(node.keypoints_no_Kalman)       # List[np.ndarray]
+    #         YOLO_plot_list.append(node.YOLO_plot)                           # List[np.ndarray]
+    #         # logger.info(f"recording length: {len(mask_list)}")
         
-        # TODO: manage publisher frequency
-        rospy.sleep(1/PUB_FREQ)
+    #     # TODO: manage publisher frequency
+    #     rospy.sleep(1/PUB_FREQ)
 
-    logger.success("rospy shutdown")
+    # logger.success("rospy shutdown")
 
-    if node.save:
-        pickle_path = DATA_DIR_PATH / "pickle" / TEST_NAME
-        pickle_path = pickle_path.absolute().as_posix() + "_keypoints.pkl"
+    # if node.save:
+    #     pickle_path = DATA_DIR_PATH / "pickle" / TEST_NAME
+    #     pickle_path = pickle_path.absolute().as_posix() + "_keypoints.pkl"
         
-        # numpy ndarray
-        file = open(pickle_path, 'wb')
-        pickle.dump(keypoints_list, file)
-        pickle.dump(mask_list, file)
-        pickle.dump(keypoints_no_Kalman_list, file)
-        file.close()
+    #     # numpy ndarray
+    #     file = open(pickle_path, 'wb')
+    #     pickle.dump(keypoints_list, file)
+    #     pickle.dump(mask_list, file)
+    #     pickle.dump(keypoints_no_Kalman_list, file)
+    #     file.close()
         
-        logger.info(f"Data length: {len(mask_list)}")
-        logger.success("Save Keypoints Array successfully!")
+    #     logger.info(f"Data length: {len(mask_list)}")
+    #     logger.success("Save Keypoints Array successfully!")
 
 
-    if SAVE_YOLO_IMG:
-        pickle_path = DATA_DIR_PATH / "pickle" / TEST_NAME
-        pickle_path = pickle_path.absolute().as_posix() + "_YOLOimgs.pkl"
+    # if SAVE_YOLO_IMG:
+    #     pickle_path = DATA_DIR_PATH / "pickle" / TEST_NAME
+    #     pickle_path = pickle_path.absolute().as_posix() + "_YOLOimgs.pkl"
 
-        file = open(pickle_path, 'wb')
-        pickle.dump(YOLO_plot_list, file)
-        file.close()
-        logger.info(f"Imgs length: {len(YOLO_plot_list)}")
-        logger.success("Save YOLO Imgs successfully!")
+    #     file = open(pickle_path, 'wb')
+    #     pickle.dump(YOLO_plot_list, file)
+    #     file.close()
+    #     logger.info(f"Imgs length: {len(YOLO_plot_list)}")
+    #     logger.success("Save YOLO Imgs successfully!")
 
         # # video
         # video_path = DATA_DIR_PATH / "video" / TEST_NAME
@@ -558,6 +459,7 @@ def main() -> None:
         
 
 if __name__ == '__main__':
-    if not os.path.exists(DATA_DIR_PATH / "pickle"):
-        os.mkdir(DATA_DIR_PATH / "pickle")
+    if SAVE_DATA:
+        if not os.path.exists(DATA_DIR_PATH / "pickle"):
+            os.mkdir(DATA_DIR_PATH / "pickle")
     main()

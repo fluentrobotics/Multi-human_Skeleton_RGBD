@@ -26,7 +26,7 @@ CAMERA_FRAME = "camera_color_optical_frame"
 ID_TYPE = np.int32
 
 # Node PARAMETERS
-SKELETON_NODE = "skeleton"
+SKELETON_NODE = "skeleton_3D"
 COMPRESSED_TOPICS = {'rgb': True, 'depth': False}
 MAX_MISSING = 5
 SKELETAL_LINE_PAIRS_LIST = [(4,2),(2,0),(0,1),(1,3),
@@ -41,7 +41,7 @@ SKELETAL2BODY = np.array(["Nose", "Left Eye", "Right Eye", "Left Ear", "Right Ea
 POSE_MODEL = 'yolov8m-pose.pt'
 
 # RViz Visualization (code errors)
-RVIZ_VIS = False
+RVIZ_VIS = True
 HUMAN_MARKER_ID_VOL = 10
 KEYPOINT_ID_OFFSET = 0
 LINE_ID_OFFSET = 1
@@ -54,8 +54,8 @@ DATA_DIR_PATH = PROJECT_PATH / "data"
 # TODO: Cutomized Parameters
 # TEST_NAME = "test_Minimal_True"
 TEST_NAME = "Multi_Human2"
-SAVE_DATA = True
-SAVE_YOLO_IMG = True
+SAVE_DATA = False
+SAVE_YOLO_IMG = False
 DEMO_TYPE = 'gif'
 
 # Filters
