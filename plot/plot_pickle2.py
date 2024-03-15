@@ -9,8 +9,8 @@ from pathlib import Path
 import time
 from tqdm import tqdm
 
-from feature_extractor.config import *
-from feature_extractor.utils import delete_files_in_directory
+from skeleton_extractor.config import *
+from skeleton_extractor.utils import delete_files_in_directory
 
 # Local Config
 XLIM3D = (-0.5,3)

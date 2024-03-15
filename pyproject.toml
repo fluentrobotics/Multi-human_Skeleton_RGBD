@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "feature_extractor"
+name = "skeleton_extractor"
 version = "0.1.0"
 description = "package for ROS2 Humble container"
 authors = ["Mo Xu <xmo@umich.edu>"]

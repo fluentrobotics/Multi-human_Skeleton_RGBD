@@ -6,7 +6,7 @@ import imageio
 import numpy as np
 from pathlib import Path
 from tqdm import tqdm
-from feature_extractor.config import *
+from skeleton_extractor.config import *
 
 fig_path = DATA_DIR_PATH / "figure" / TEST_NAME
 fig_path = fig_path.absolute().as_posix() + "_fig"

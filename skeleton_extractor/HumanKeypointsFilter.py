@@ -1,10 +1,10 @@
 import numpy as np
 import cv2
 from typing import Optional
-from feature_extractor.KalmanFilter import KalmanFilter
-from feature_extractor.utils import logger
+from skeleton_extractor.KalmanFilter import KalmanFilter
+from skeleton_extractor.utils import logger
 
-from feature_extractor.config import MAX_MISSING
+from skeleton_extractor.config import MAX_MISSING
 
 class HumanKeypointsFilter:
     """

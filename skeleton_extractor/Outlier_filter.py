@@ -1,7 +1,7 @@
 import numpy as np
 
 # Global Config
-from feature_extractor.config import *
+from skeleton_extractor.config import *
 
 # Local Config
 THRESHOLD = 1     # 1.0 meter

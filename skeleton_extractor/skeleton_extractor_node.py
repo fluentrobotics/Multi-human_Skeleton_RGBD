@@ -28,13 +28,13 @@ import torch
 from ultralytics import YOLO
 from ultralytics.engine.results import Results
 
-from feature_extractor.HumanKeypointsFilter import HumanKeypointsFilter
-from feature_extractor.Outlier_filter import find_inliers
-from feature_extractor.rviz2_maker import *
-from feature_extractor.utils import *
+from skeleton_extractor.HumanKeypointsFilter import HumanKeypointsFilter
+from skeleton_extractor.Outlier_filter import find_inliers
+from skeleton_extractor.rviz2_maker import *
+from skeleton_extractor.utils import *
 
 # Global Config
-from feature_extractor.config import *
+from skeleton_extractor.config import *
 # Local Config
 bridge = CvBridge()
 

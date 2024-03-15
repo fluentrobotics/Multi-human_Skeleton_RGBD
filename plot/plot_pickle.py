@@ -8,7 +8,7 @@ from pathlib import Path
 import time
 from tqdm import tqdm
 
-from feature_extractor.config import *
+from skeleton_extractor.config import *
 
 
 

@@ -1,6 +1,6 @@
 import numpy as np
 
-from feature_extractor.utils import get_project_dir_path
+from skeleton_extractor.utils import get_project_dir_path
 
 # SKELETAL NODE config #############################################################
 
