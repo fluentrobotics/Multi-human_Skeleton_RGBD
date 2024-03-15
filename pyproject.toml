@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "feature_extractor"
 version = "0.1.0"
-description = ""
+description = "package for ROS2 Humble container"
 authors = ["Mo Xu <xmo@umich.edu>"]
 readme = "README.md"
 
@@ -47,6 +47,7 @@ seaborn = "^0.13.0"
 thop = "^0.1.1.post2209072238"
 tqdm = "^4.66.1"
 ultralytics = "^8.0.199"
+lapx = "^0.5.2"
 pycryptodome = "^3.19.1"
 pycryptodomex = "^3.19.1"
 gnupg = "^2.3.1"

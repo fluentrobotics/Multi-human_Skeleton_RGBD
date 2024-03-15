@@ -52,6 +52,7 @@ class skeletal_extractor_node(Node):
                  minimal_filter: bool = True,
                  outlier_filter: bool = True,
                  rviz: bool = False,
+                 init_rviz: bool = True,
                  save: bool = True,
     ):
         """
@@ -73,6 +74,7 @@ class skeletal_extractor_node(Node):
         self.use_minimal_filter = minimal_filter
         self.use_outlier_filter = outlier_filter
         self.save = save
+        self.ns = "camera"
 
         logger.info(f"\nInitialization\n rotate={self.rotate}\n \
                     compressed={self.compressed}\n \
@@ -124,7 +126,7 @@ class skeletal_extractor_node(Node):
         self.pub_timer = self.create_timer(timer_period, self._timer_callback)
 
         # Publisher ###########################################################   
-        # # TODO: now we only publish RViz first
+        # # TODO: now we only publish RViz firstly
         # self._skeleton_human_id_pub = self.create_publisher(
         #     Int32MultiArray, SKELETON_HUMAN_ID_TOPIC, 1
         # )
@@ -141,11 +143,13 @@ class skeletal_extractor_node(Node):
         # RViz Skeletons ####################################################
         if self.rviz:
             self._rviz_keypoints_img2d_pub = self.create_publisher(
-                Image, RVIZ_IMG2D_SKELETON_TOPIC, 1
+                Image, RVIZ_IMG2D_SKELETON_TOPIC, 5
             )
             self._rviz_keypoints_marker3d_pub = self.create_publisher(
-                MarkerArray, RVIZ_MARKER3D_SKELETON_TOPIC, 1
+                MarkerArray, RVIZ_MARKER3D_SKELETON_TOPIC, 5
             )
+            self._reset_rviz(ns=self.ns)
+            logger.debug(f"clear markers in {self.ns}")
         
         if self.save:
             # save keypoints
@@ -161,19 +165,27 @@ class skeletal_extractor_node(Node):
         # Camera Calibration Info Subscriber ##################################
         self.receive_from_camera: bool = False
         self.waiting_cam_count: int = 0
-        self._cam_info_sub = self.create_subscription(CameraInfo, CAMERA_INFO_TOPIC, self._cam_info_callback)
+        self._cam_info_sub = self.create_subscription(CameraInfo, CAMERA_INFO_TOPIC, self._cam_info_callback, 1)
 
         self._msg_lock = threading.Lock()   # lock the data resource
         self._reset_sub_msg()
+
+
         # #####################################################################
+
+
+
+        # Test variable #############
+        self.current_human: list = list()
+        #############################
         
     def _timer_callback(self) -> None:
         if self.receive_from_camera is True:
             self._skeleton_inference_and_publish()
         else:
             self.waiting_cam_count += 1
-            if self.waiting_cam_count % 20 == 0:
-                logger.warning(f"waiting for camera information, {self.waiting_cam_count // 20}")
+            if self.waiting_cam_count % 40 == 0:
+                logger.warning(f"waiting for camera information, {self.waiting_cam_count // 20}, now: {self.get_clock().now().nanoseconds}")
 
             # wait too long
             # if self.waiting_cam_count >= 400:
@@ -190,13 +202,20 @@ class skeletal_extractor_node(Node):
     def _cam_info_callback(self, msg: CameraInfo) -> None:
         if self.receive_from_camera is False:
             self.receive_from_camera = True
-            self._intrinsic_matrix = np.array(msg.K).reshape(3,3)
+            self._intrinsic_matrix = np.array(msg.k).reshape(3,3)
             logger.info(f"\nCamera Intrinsic Matrix:\n{self._intrinsic_matrix}")
 
     def _reset_sub_msg(self):
         with self._msg_lock:
             self._rgb_msg = None
             self._depth_msg = None
+
+    def _reset_rviz(self, ns) -> None:
+        deleteall_list = deleteall_marker(ns=ns)
+        marker_array = MarkerArray()
+        marker_array.markers = deleteall_list
+        self._rviz_keypoints_marker3d_pub.publish(marker_array)
+
 
     def _skeleton_inference_and_publish(self) -> None:
 
@@ -279,10 +298,15 @@ class skeletal_extractor_node(Node):
         
         # delele missing pedestrians
         del_list = []
-        for key in self.human_dict.keys:
+        for key in self.human_dict.keys():
             self.human_dict[key].missing_count += 1
             if self.human_dict[key].missing_count > MAX_MISSING:
                 del_list.append(key)
+
+
+        if self.current_human != list(self.human_dict.keys()):
+            self.current_human = list(self.human_dict.keys())
+            logger.debug(f"current human id: {self.current_human}")
 
         for key in del_list:
             logger.debug(f"DEL human_{key}")
@@ -292,6 +316,7 @@ class skeletal_extractor_node(Node):
             
             # RVIZ ####################################################
             if self.rviz:
+                logger.info(f"DELETE human id: {key}")
                 delete_list = delete_human_marker(key, offset_list=[KEYPOINT_ID_OFFSET, LINE_ID_OFFSET])
                 all_marker_list.extend(delete_list)
 
@@ -302,6 +327,8 @@ class skeletal_extractor_node(Node):
 
         for idx, id in enumerate(id_human, start=0):
             # query or set if non-existing
+            if id not in self.human_dict.keys():
+                logger.info(f"ADD human id: {id}")
             self.human_dict.setdefault(id, HumanKeypointsFilter(id=id, 
                                                                 gaussian_blur=self.use_gaussian_blur, 
                                                                 minimal_filter=self.use_minimal_filter,
@@ -337,16 +364,20 @@ class skeletal_extractor_node(Node):
             if self.rviz:
                 add_keypoint_marker = add_human_skeletal_keypoint_Marker(human_id= id,
                                                                          keypoint_KD= keypoints_cam, 
-                                                                         keypoint_mask_K= self.human_dict[id].valid_keypoints,
+                                                                         keypoint_mask_K=new_mask,
                                                                          offset= KEYPOINT_ID_OFFSET,
                                                                          )
-                
+                add_geo_center_marker = add_human_geo_center_Marker(human_id=id,
+                                                                    geo_center=geo_center,
+                                                                    )
+
                 add_line_marker = add_human_skeletal_line_Marker(human_id= id,
                                                                  keypoint_KD= keypoints_cam,
-                                                                 keypoint_mask_K= self.human_dict[id].valid_keypoints,
+                                                                 keypoint_mask_K=new_mask,
                                                                  offset= LINE_ID_OFFSET)
                 
-                all_marker_list.extend([add_keypoint_marker, add_line_marker])
+                # all_marker_list.extend([add_keypoint_marker])
+                all_marker_list.extend([add_keypoint_marker, add_geo_center_marker, add_line_marker])
         
         if self.save:
             self.filtered_keypoints = keypoints_3d
@@ -359,17 +390,17 @@ class skeletal_extractor_node(Node):
         # id_msg.data = id_human.tolist()     # much faster than for loop
         
         # NOTE: numpy_msg
-        self._skeleton_human_id_pub.publish(data=id_human)           # [H,]
-        self._skeleton_mask_mat_pub.publish(data=keypoints_mask)     # [H,K]
-        self._raw_skeleton_pub.publish(data=keypoints_no_Kalman)           # [H,K,D]
-        self._filtered_skeleton_pub.publish(data=keypoints_3d)       # [H,K,D]
+        # self._skeleton_human_id_pub.publish(data=id_human)           # [H,]
+        # self._skeleton_mask_mat_pub.publish(data=keypoints_mask)     # [H,K]
+        # self._raw_skeleton_pub.publish(data=keypoints_no_Kalman)           # [H,K,D]
+        # self._filtered_skeleton_pub.publish(data=keypoints_3d)       # [H,K,D]
 
         # RVIZ ####################################################
         if self.rviz:
             all_marker_array = MarkerArray()
             all_marker_array.markers = all_marker_list
             self._rviz_keypoints_marker3d_pub.publish(all_marker_array)
-            logger.success("Publish MakerArray")
+            # logger.success("Publish MakerArray")
             
         self._reset_sub_msg()   # if no new sub msg, pause this fun
 
@@ -389,77 +420,10 @@ def main(args=None) -> None:
     
     logger.success(f"{SKELETON_NODE} Node initialized")
     rclpy.spin(node)
-
-    # # record data
-    # if SAVE_DATA:
-    #     keypoints_list = []
-    #     mask_list = []
-    #     keypoints_no_Kalman_list = []
-    #     YOLO_plot_list = []
-
-    # while not rospy.is_shutdown():
-        
-    #     node._skeleton_inference_and_publish()
-
-    #     if node.save:
-    #         # record data
-    #         keypoints_list.append(node.filtered_keypoints)                  # List[np.ndarray]
-    #         mask_list.append(node.keypoints_mask)                           # List[np.ndarray]
-    #         keypoints_no_Kalman_list.append(node.keypoints_no_Kalman)       # List[np.ndarray]
-    #         YOLO_plot_list.append(node.YOLO_plot)                           # List[np.ndarray]
-    #         # logger.info(f"recording length: {len(mask_list)}")
-        
-    #     # TODO: manage publisher frequency
-    #     rospy.sleep(1/PUB_FREQ)
-
-    # logger.success("rospy shutdown")
-
-    # if node.save:
-    #     pickle_path = DATA_DIR_PATH / "pickle" / TEST_NAME
-    #     pickle_path = pickle_path.absolute().as_posix() + "_keypoints.pkl"
-        
-    #     # numpy ndarray
-    #     file = open(pickle_path, 'wb')
-    #     pickle.dump(keypoints_list, file)
-    #     pickle.dump(mask_list, file)
-    #     pickle.dump(keypoints_no_Kalman_list, file)
-    #     file.close()
-        
-    #     logger.info(f"Data length: {len(mask_list)}")
-    #     logger.success("Save Keypoints Array successfully!")
-
-
-    # if SAVE_YOLO_IMG:
-    #     pickle_path = DATA_DIR_PATH / "pickle" / TEST_NAME
-    #     pickle_path = pickle_path.absolute().as_posix() + "_YOLOimgs.pkl"
-
-    #     file = open(pickle_path, 'wb')
-    #     pickle.dump(YOLO_plot_list, file)
-    #     file.close()
-    #     logger.info(f"Imgs length: {len(YOLO_plot_list)}")
-    #     logger.success("Save YOLO Imgs successfully!")
-
-        # # video
-        # video_path = DATA_DIR_PATH / "video" / TEST_NAME
-        # video_path = video_path.absolute().as_posix() + ".mp4"
-        # fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-        # height, width, layers = node.video_img_list[0].shape
-        # size = (width,height)
-        # out = cv2.VideoWriter(filename=video_path,
-        #                       fourcc=fourcc,
-        #                       fps=PUB_FREQ,
-        #                       frameSize=size,
-        #                       )
-        # for img in node.video_img_list:
-        #     out.write(img)
-
-        # cv2.destroyAllWindows()
-        # out.release()
-        # logger.success("Save Video successfully!")
         
 
 if __name__ == '__main__':
-    if SAVE_DATA:
-        if not os.path.exists(DATA_DIR_PATH / "pickle"):
-            os.mkdir(DATA_DIR_PATH / "pickle")
+    # if SAVE_DATA:
+    #     if not os.path.exists(DATA_DIR_PATH / "pickle"):
+    #         os.mkdir(DATA_DIR_PATH / "pickle")
     main()
