@@ -1,0 +1,9 @@
+<launch>
+    <node 
+        pkg="skeleton_extractor" 
+        exec="python_entrypoint.py"
+        name="skeleton" 
+        launch-prefix="$(find-pkg-prefix skeleton_extractor)/.venv/bin/python"
+        output="screen"
+    />
+</launch>

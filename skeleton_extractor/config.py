@@ -26,7 +26,7 @@ CAMERA_FRAME = "camera_color_optical_frame"
 ID_TYPE = np.int32
 
 # Node PARAMETERS
-SKELETON_NODE = "skeleton_3D"
+SKELETON_NODE = "skeleton"
 COMPRESSED_TOPICS = {'rgb': True, 'depth': False}
 MAX_MISSING = 5
 SKELETAL_LINE_PAIRS_LIST = [(4,2),(2,0),(0,1),(1,3),

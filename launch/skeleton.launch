@@ -1,6 +1,0 @@
-<launch>
-    <node pkg="feature_extractor" exec="skeleton_extractor_node" name="skeleton_3D" output="screen"/>
-
-
-    
-</launch>

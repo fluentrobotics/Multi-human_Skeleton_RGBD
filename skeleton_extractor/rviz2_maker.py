@@ -17,7 +17,7 @@ def add_human_skeletal_keypoint_Marker(human_id: ID_TYPE,
                                        keypoint_KD: np.ndarray,
                                        keypoint_mask_K: np.ndarray,
                                        frame_id = "camera_link",
-                                       ns = "camera",
+                                       ns = "skeleton",
                                        offset = KEYPOINT_ID_OFFSET,
                                        ) -> Marker:
     """

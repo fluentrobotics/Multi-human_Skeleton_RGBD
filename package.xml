@@ -3,14 +3,15 @@
 <package format="3">
   <name>skeleton_extractor</name>
   <version>0.0.0</version>
-  <description>ROS integration for Ultralytics YOLOv8</description>
-  <maintainer email="eyy@umich.edu">Elvin Yang</maintainer>
+  <description>3D skeleton perception</description>
+  <maintainer email="1999xmo@gmail.com">Mo Xu</maintainer>
   <!-- ultralytics is released under AGPL-3.0 -->
   <license>AGPL-3.0</license>
 
   <exec_depend>rclpy</exec_depend>
   <exec_depend>builtin_interfaces</exec_depend>
   <exec_depend>cv_bridge</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
   <exec_depend>geometry_msgs</exec_depend>
   <exec_depend>sensor_msgs</exec_depend>
   <exec_depend>visualization_msgs</exec_depend>
