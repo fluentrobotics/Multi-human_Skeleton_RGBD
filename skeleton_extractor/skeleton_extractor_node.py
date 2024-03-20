@@ -394,6 +394,7 @@ class skeletal_extractor_node(Node):
                                                                          offset= KEYPOINT_ID_OFFSET,
                                                                          frame_id=self.frame_id,
                                                                          )
+                
                 add_geo_center_marker = add_human_geo_center_Marker(human_id=id,
                                                                     geo_center=geo_center,
                                                                     frame_id=self.frame_id,
