@@ -55,6 +55,7 @@ class skeletal_extractor_node(Node):
                  rviz: bool = False,
                  init_rviz: bool = True,
                  save: bool = True,
+                 ref_link: str = 'link_head'
     ):
         """
         @rotate: default =  cv2.ROTATE_90_CLOCKWISE
@@ -75,7 +76,8 @@ class skeletal_extractor_node(Node):
         self.use_minimal_filter = minimal_filter
         self.use_outlier_filter = outlier_filter
         self.save = save
-        self.ns = "camera"
+        self.ns = "skeleton"
+        self.frame_id = ref_link
 
         logger.info(f"\nInitialization\n rotate={self.rotate}\n \
                     compressed={self.compressed}\n \
@@ -98,6 +100,13 @@ class skeletal_extractor_node(Node):
         self.keypoints_HKD: np.ndarray
         self.step = 0
 
+
+        # logger debugger
+        self.no_human_debugger = False
+        self.no_message_debugger = False
+
+
+        
         # Subscriber ##########################################################
         if self.compressed['rgb']:
             self._rgb_sub = self.create_subscription(
@@ -181,7 +190,7 @@ class skeletal_extractor_node(Node):
         #############################
         
     def _timer_callback(self) -> None:
-        if self.receive_from_camera is True:
+        if self.receive_from_camera:
             self._skeleton_inference_and_publish()
         else:
             self.waiting_cam_count += 1
@@ -201,18 +210,20 @@ class skeletal_extractor_node(Node):
             self._depth_msg = msg
 
     def _cam_info_callback(self, msg: CameraInfo) -> None:
-        if self.receive_from_camera is False:
-            self.receive_from_camera = True
+        with self._msg_lock:
             self._intrinsic_matrix = np.array(msg.k).reshape(3,3)
-            logger.info(f"\nCamera Intrinsic Matrix:\n{self._intrinsic_matrix}")
+            if not self.receive_from_camera:
+                self.receive_from_camera = True
+                logger.info(f"\nCamera Intrinsic Matrix:\n{self._intrinsic_matrix}")
+            
 
     def _reset_sub_msg(self):
         with self._msg_lock:
             self._rgb_msg = None
             self._depth_msg = None
 
-    def _reset_rviz(self, ns) -> None:
-        deleteall_list = deleteall_marker(ns=ns)
+    def _reset_rviz(self, ns='skeleton') -> None:
+        deleteall_list = deleteall_marker(ns=ns, frame_id=self.frame_id)
         marker_array = MarkerArray()
         marker_array.markers = deleteall_list
         self._rviz_keypoints_marker3d_pub.publish(marker_array)
@@ -228,9 +239,17 @@ class skeletal_extractor_node(Node):
             self.YOLO_plot = None
         
         
+        # no rgb-d message ##########################################
         if self._rgb_msg is None or self._depth_msg is None:
+            if not self.no_message_debugger:
+                logger.debug(f"No RGB-D messages")
+                self.no_message_debugger = True
             return
-        
+        self.no_message_debugger = False
+
+        #############################################################
+        #############################################################
+
         rgb_msg_header = self._rgb_msg.header
         
         # compressed img
@@ -258,6 +277,7 @@ class skeletal_extractor_node(Node):
         results: list[Results] = self._POSE_model.track(bgr_frame, persist=True, verbose=False)
 
         if not results:
+            logger.debug(f"no yolo results")
             return
         
         yolo_res = results[0]
@@ -275,27 +295,31 @@ class skeletal_extractor_node(Node):
         
         # 2D -> 3D ################################################################
         num_human, num_keypoints, num_dim = yolo_res.keypoints.data.shape
-        if num_keypoints == 0 or num_keypoints == 0:
-            return
-        
         id_human = yolo_res.boxes.id                    # Tensor [H]
         
         # if no detections, gets [1,0,51], yolo_res.boxes.id=None
-        if id_human is None:
+        if id_human is None or num_keypoints == 0 or num_keypoints == 0:
+            if self.no_human_debugger is False:
+                logger.debug('no human or no keypoints, reset rviz')
+                self.no_human_debugger = True
+
+                self._reset_rviz(ns=self.ns)
+
             return
+        else:
+            self.no_human_debugger = False
+            conf_keypoints = yolo_res.keypoints.conf.cpu().numpy()        # Tensor [H,K]
+            keypoints_2d = yolo_res.keypoints.data.cpu().numpy()          # Tensor [H,K,D(x,y,conf)] [H, 17, 3]
+
+            conf_boxes = yolo_res.boxes.conf.cpu().numpy()                # Tensor [H,]
+            id_human = id_human.cpu().numpy().astype(ID_TYPE)             # Tensor [H,]
+
         # logger.debug(f"\ndata shape:{yolo_res.keypoints.data.shape}\nhuman ID:{id_human}")
         # logger.info("Find Keypoints")
-        
-        conf_keypoints = yolo_res.keypoints.conf.cpu().numpy()        # Tensor [H,K]
-        keypoints_2d = yolo_res.keypoints.data.cpu().numpy()          # Tensor [H,K,D(x,y,conf)] [H, 17, 3]
-
-        conf_boxes = yolo_res.boxes.conf.cpu().numpy()                # Tensor [H,]
-        id_human = id_human.cpu().numpy().astype(ID_TYPE)             # Tensor [H,]
 
 
         # TODO: warning if too many human in the dictionary
         # if len(self.human_dict) >= MAX_dict_vol:
-
         
         # delele missing pedestrians
         del_list = []
@@ -310,15 +334,15 @@ class skeletal_extractor_node(Node):
             logger.debug(f"current human id: {self.current_human}")
 
         for key in del_list:
-            logger.debug(f"DEL human_{key}")
+            logger.debug(f"DEL human_{key} from human_dict")
             self.human_dict[key] = None
             del self.human_dict[key]
             # python memory management system will release deleted space in the future
             
             # RVIZ ####################################################
             if self.rviz:
-                logger.info(f"DELETE human id: {key}")
-                delete_list = delete_human_marker(key, offset_list=[KEYPOINT_ID_OFFSET, LINE_ID_OFFSET])
+                logger.info(f"DELETE human id: {key} in RViz")
+                delete_list = delete_human_marker(key, offset_list=[KEYPOINT_ID_OFFSET, LINE_ID_OFFSET], frame_id=self.frame_id)
                 all_marker_list.extend(delete_list)
 
 
@@ -353,6 +377,7 @@ class skeletal_extractor_node(Node):
             if self.use_outlier_filter:
                 # logger.debug(f"{keypoints_cam}\n{self.human_dict[id].valid_keypoints}")
                 new_mask, geo_center = find_inliers(data_KD=keypoints_cam, mask_K= self.human_dict[id].valid_keypoints)
+                logger.debug(geo_center)
             else:
                 new_mask = self.human_dict[id].valid_keypoints
             
@@ -367,15 +392,19 @@ class skeletal_extractor_node(Node):
                                                                          keypoint_KD= keypoints_cam, 
                                                                          keypoint_mask_K=new_mask,
                                                                          offset= KEYPOINT_ID_OFFSET,
+                                                                         frame_id=self.frame_id,
                                                                          )
                 add_geo_center_marker = add_human_geo_center_Marker(human_id=id,
                                                                     geo_center=geo_center,
+                                                                    frame_id=self.frame_id,
                                                                     )
 
                 add_line_marker = add_human_skeletal_line_Marker(human_id= id,
                                                                  keypoint_KD= keypoints_cam,
                                                                  keypoint_mask_K=new_mask,
-                                                                 offset= LINE_ID_OFFSET)
+                                                                 offset= LINE_ID_OFFSET,
+                                                                 frame_id = self.frame_id,
+                                                                 )
                 
                 # all_marker_list.extend([add_keypoint_marker])
                 all_marker_list.extend([add_keypoint_marker, add_geo_center_marker, add_line_marker])
@@ -417,6 +446,7 @@ def main(args=None) -> None:
                                    outlier_filter=OUTLIER_FILTER,
                                    rviz=RVIZ_VIS,
                                    save=SAVE_DATA,
+                                   ref_link='link_head',
                                    )
     
     logger.success(f"{SKELETON_NODE} Node initialized")

@@ -16,7 +16,7 @@ from skeleton_extractor.utils import *
 def add_human_skeletal_keypoint_Marker(human_id: ID_TYPE, 
                                        keypoint_KD: np.ndarray,
                                        keypoint_mask_K: np.ndarray,
-                                       frame_id = "camera_link",
+                                       frame_id = "link_head",
                                        ns = "skeleton",
                                        offset = KEYPOINT_ID_OFFSET,
                                        ) -> Marker:
@@ -66,14 +66,16 @@ def add_human_skeletal_keypoint_Marker(human_id: ID_TYPE,
 
 def add_human_geo_center_Marker(human_id: ID_TYPE,
                                 geo_center: np.ndarray,
-                                frame_id = "camera_link",
-                                ns = "camera",) -> Marker:
+                                frame_id = "link_head",
+                                ns = "skeleton",
+                                offset = GEO_CENTER_ID_OFFSET) -> Marker:
     
     marker = Marker()
     marker.header.frame_id = frame_id
     marker.ns = ns
     marker.type = Marker.SPHERE
     marker.action = Marker.ADD
+    marker.id = int(human_id.item() * HUMAN_MARKER_ID_VOL + offset)
 
     marker.scale.x = 0.1
     marker.scale.y = 0.1
@@ -94,8 +96,8 @@ def add_human_geo_center_Marker(human_id: ID_TYPE,
 def add_human_skeletal_line_Marker(human_id: ID_TYPE, 
                                    keypoint_KD: np.ndarray,
                                    keypoint_mask_K: np.ndarray,
-                                   frame_id = "camera_link",
-                                   ns = "camera",
+                                   frame_id = "link_head",
+                                   ns = "skeleton",
                                    offset = LINE_ID_OFFSET) -> Marker:
     """
     @human_id: ID_TYPE(np.int32)
@@ -140,7 +142,7 @@ def add_human_skeletal_line_Marker(human_id: ID_TYPE,
         
 
 def delete_human_marker(human_id: ID_TYPE,
-                        frame_id = "skeleton_frame",
+                        frame_id = "link_head",
                         ns = "skeleton",
                         offset_list: list = [KEYPOINT_ID_OFFSET, LINE_ID_OFFSET]
                         ) -> list[Marker]:
@@ -160,7 +162,7 @@ def delete_human_marker(human_id: ID_TYPE,
 
 
 
-def deleteall_marker(frame_id = "skeleton_frame",
+def deleteall_marker(frame_id = "link_head",
                ns = "skeleton") -> list[Marker]:
     
     delete_all_list: list[Marker] = list()

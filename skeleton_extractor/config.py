@@ -9,7 +9,7 @@ COLOR_FRAME_TOPIC = '/camera/color/image_raw'
 COLOR_COMPRESSED_FRAME_TOPIC = '/camera/color/image_raw/compressed'
 DEPTH_ALIGNED_TOPIC = '/camera/aligned_depth_to_color/image_raw'
 DEPTH_ALIGNED_COMPRESSED_TOPIC = '/camera/aligned_depth_to_color/image_raw/compressed'
-CAMERA_INFO_TOPIC = '/camera/aligned_depth_to_color/camera_info'
+CAMERA_INFO_TOPIC = '/camera/color/camera_info'
 CAMERA_INTRINSIC = [906.7041625976562, 0.0, 653.4981689453125, 0.0, 906.7589111328125, 375.4635009765625, 0.0, 0.0, 1.0]
 # PUB topic
 SKELETON_HUMAN_ID_TOPIC = 'skeleton/numpy_msg/human_id'
@@ -28,7 +28,7 @@ ID_TYPE = np.int32
 # Node PARAMETERS
 SKELETON_NODE = "skeleton"
 COMPRESSED_TOPICS = {'rgb': True, 'depth': False}
-MAX_MISSING = 5
+MAX_MISSING = 20
 SKELETAL_LINE_PAIRS_LIST = [(4,2),(2,0),(0,1),(1,3),
                             (10,8),(8,6),(6,5),(5,7),(7,8),
                             (6,12),(12,14),(14,16),(5,11),(11,13),(13,15),(12,11)]
@@ -45,6 +45,8 @@ RVIZ_VIS = True
 HUMAN_MARKER_ID_VOL = 10
 KEYPOINT_ID_OFFSET = 0
 LINE_ID_OFFSET = 1
+GEO_CENTER_ID_OFFSET = 2
+
 
 # PATH
 PROJECT_PATH = get_project_dir_path()
