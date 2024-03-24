@@ -11,6 +11,14 @@ find_package(ament_cmake REQUIRED)
 # further dependencies manually.
 # find_package(<dependency> REQUIRED)
 
+# Build Python virtual environment
+add_custom_target(
+    poetry_virtualenv ALL
+    COMMAND poetry install --no-root --no-ansi --no-interaction
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    COMMENT "Building ${CMAKE_PROJECT_NAME} virtualenv to ${CMAKE_SOURCE_DIR}... this may take some time"
+)
+
 install(
     DIRECTORY launch
     DESTINATION share/${PROJECT_NAME}/
