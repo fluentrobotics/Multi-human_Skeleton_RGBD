@@ -84,37 +84,42 @@ class HumanKeypointsFilter:
         valid_xy = keypoints_2d[:,:2] != 0.00        # bool [K,2]
         self.valid_keypoints = valid_xy[:,0] & valid_xy[:,1]        # bool vector [K,]
         self.valid_keypoints = self.valid_keypoints.astype(bool)
-
-        M, N = depth_frame.shape
+        
+        depth_V, depth_U = depth_frame.shape
         # logger.debug(f"\nkeypoint mask:\n{self.valid_keypoints}")
         # logger.debug(f"\nkeypoint:\n{keypoints_2d}")
         # convert keypoints to the original coordinate
+        keypoints_x = keypoints_2d[:, 0:1]
+        keypoints_y = keypoints_2d[:, 1:2]
+
         if rotate == cv2.ROTATE_90_CLOCKWISE:
-            axis_0 = depth_frame.shape[0]-1 - keypoints_2d[:, 0:1]  # vector [K,1], -1 to within the idx range
-            axis_1 = keypoints_2d[:, 1:2]-1                         # vector [K,1]
+            # logger.debug("rotate 90 degree")
+            axis_u = keypoints_y                         # vector [K,1]
+            axis_v = depth_V-1 - keypoints_x  # vector [K,1], -1 to within the idx range
         else:
+            assert rotate == None, "Please Modify Codes with Your Rotation"
             # no ratation
-            axis_0 = keypoints_2d[:, 1:2]-1
-            axis_1 = keypoints_2d[:, 0:1]-1
+            axis_u = keypoints_x
+            axis_v = keypoints_y
         
         # fix boundary data with figure size
-        axis_0 = np.maximum(axis_0, 0)
-        axis_0 = np.minimum(axis_0, M-1)
-        axis_1 = np.maximum(axis_1, 0)
-        axis_1 = np.minimum(axis_1, N-1)
+        axis_u = np.maximum(axis_u, 0)
+        axis_u = np.minimum(axis_u, depth_U-1)
+        axis_v = np.maximum(axis_v, 0)
+        axis_v = np.minimum(axis_v, depth_V-1)
         
-        axis_2 = np.ones_like(axis_0)
+        axis_unit = np.ones_like(axis_u)   # ones of shape [K,1]
 
-        keypoints_pixel = np.concatenate((axis_0, axis_1, axis_2), axis=1).astype(np.int16)     # [K, 3]
+        keypoints_pixel = np.concatenate((axis_u, axis_v, axis_unit), axis=1).astype(np.int16)     # [K, 3]
         
         # Preprocessing Filters
         if self.gaussian_blur:
             depth_frame = self.gaussianBlur_depth(depth_frame)
         if self.minimal_filter:
             depth_frame = self.minimalFilter(depth_frame, keypoints_pixel)
-        
-        keypoints_depth = depth_frame[keypoints_pixel[:,0], keypoints_pixel[:,1]]               # [K,]
-        #                   [3,3]           [3,K]               [K,K]
+        # ndarray is the transpose coordinate of xy coordinate
+        keypoints_depth = depth_frame[keypoints_pixel[:,1], keypoints_pixel[:,0]]               # [K,]
+        #                                   [3,3]              [3,K]                [K,K]
         raw_keypoints_cam = np.linalg.inv(intrinsic_mat) @ keypoints_pixel.T @ np.diag(keypoints_depth)            # [3, K]     inverse intrinsic
         return raw_keypoints_cam.T    #[K,3]
     

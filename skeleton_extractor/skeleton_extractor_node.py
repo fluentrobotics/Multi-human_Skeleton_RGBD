@@ -53,9 +53,8 @@ class skeletal_extractor_node(Node):
                  minimal_filter: bool = True,
                  outlier_filter: bool = True,
                  rviz: bool = False,
-                 init_rviz: bool = True,
                  save: bool = True,
-                 ref_link: str = 'link_head'
+                 namespace: str = 'skeleton'
     ):
         """
         @rotate: default =  cv2.ROTATE_90_CLOCKWISE
@@ -76,21 +75,23 @@ class skeletal_extractor_node(Node):
         self.use_minimal_filter = minimal_filter
         self.use_outlier_filter = outlier_filter
         self.save = save
-        self.ns = "skeleton"
-        self.frame_id = ref_link
+        self.ns = namespace
+        self.frame_id: str = None
 
-        logger.info(f"\nInitialization\n rotate={self.rotate}\n \
+        logger.info(f"\nInitialization\n \
+                    NodeName={SKELETON_NODE}\n \
+                    rotate={self.rotate}\n \
                     compressed={self.compressed}\n \
                     syncronization={self.syn}\n \
                     pose_model={pose_model}\n \
                     KalmanFilter={self.use_kalman}\n \
                     Rviz={self.rviz}\n \
                     PubFreqency={PUB_FREQ}\n \
-                    NodeName={SKELETON_NODE}\n \
                     MaxMissingCount={MAX_MISSING}\n \
                     Gaussian_blur={gaussian_blur}\n \
                     Minimal_filter={minimal_filter}\n \
                     Outlier_filter={outlier_filter}\n \
+                    Namespace={self.ns}\n \
                     ")
         
         # yolov8n-pose, yolov8s-pose, yolov8m-pose, yolov8l-pose, yolov8x-pose, yolov8x-pose-p6
@@ -179,8 +180,6 @@ class skeletal_extractor_node(Node):
 
         self._msg_lock = threading.Lock()   # lock the data resource
         self._reset_sub_msg()
-
-
         # #####################################################################
 
 
@@ -223,7 +222,7 @@ class skeletal_extractor_node(Node):
             self._depth_msg = None
 
     def _reset_rviz(self, ns='skeleton') -> None:
-        deleteall_list = deleteall_marker(ns=ns, frame_id=self.frame_id)
+        deleteall_list = deleteall_marker(ns=ns)
         marker_array = MarkerArray()
         marker_array.markers = deleteall_list
         self._rviz_keypoints_marker3d_pub.publish(marker_array)
@@ -232,11 +231,11 @@ class skeletal_extractor_node(Node):
     def _skeleton_inference_and_publish(self) -> None:
 
         self.step += 1
-        if self.save:
-            self.filtered_keypoints = None
-            self.keypoints_mask = None
-            self.keypoints_no_Kalman= None
-            self.YOLO_plot = None
+        # if self.save:
+        #     self.filtered_keypoints = None
+        #     self.keypoints_mask = None
+        #     self.keypoints_no_Kalman= None
+        #     self.YOLO_plot = None
         
         
         # no rgb-d message ##########################################
@@ -245,13 +244,15 @@ class skeletal_extractor_node(Node):
                 logger.debug(f"No RGB-D messages")
                 self.no_message_debugger = True
             return
+        # logger.debug(f"Yes RGB-D messages")
         self.no_message_debugger = False
 
         #############################################################
         #############################################################
 
         rgb_msg_header = self._rgb_msg.header
-        
+        self.frame_id = rgb_msg_header.frame_id
+
         # compressed img
         if self.compressed['rgb']:
             bgr_frame = bridge.compressed_imgmsg_to_cv2(self._rgb_msg)
@@ -284,14 +285,15 @@ class skeletal_extractor_node(Node):
         
         # show YOLO v8 tracking image
         yolo_plot = yolo_res.plot()
+
         if self.rviz:
             rviz_keypoint_2d_img = bridge.cv2_to_imgmsg(yolo_plot)
             self._rviz_keypoints_img2d_pub.publish(rviz_keypoint_2d_img)
             all_marker_list = []
 
-        if self.save:
-            # video
-            self.YOLO_plot = yolo_plot
+        # if self.save:
+        #     # video
+        #     self.YOLO_plot = yolo_plot
         
         # 2D -> 3D ################################################################
         num_human, num_keypoints, num_dim = yolo_res.keypoints.data.shape
@@ -310,7 +312,7 @@ class skeletal_extractor_node(Node):
             self.no_human_debugger = False
             conf_keypoints = yolo_res.keypoints.conf.cpu().numpy()        # Tensor [H,K]
             keypoints_2d = yolo_res.keypoints.data.cpu().numpy()          # Tensor [H,K,D(x,y,conf)] [H, 17, 3]
-
+            keypoints_xy = yolo_res.keypoints.xy.cpu().numpy()
             conf_boxes = yolo_res.boxes.conf.cpu().numpy()                # Tensor [H,]
             id_human = id_human.cpu().numpy().astype(ID_TYPE)             # Tensor [H,]
 
@@ -377,7 +379,7 @@ class skeletal_extractor_node(Node):
             if self.use_outlier_filter:
                 # logger.debug(f"{keypoints_cam}\n{self.human_dict[id].valid_keypoints}")
                 new_mask, geo_center = find_inliers(data_KD=keypoints_cam, mask_K= self.human_dict[id].valid_keypoints)
-                logger.debug(geo_center)
+                # logger.debug(f"Geographical Center: {geo_center}")
             else:
                 new_mask = self.human_dict[id].valid_keypoints
             
@@ -409,11 +411,11 @@ class skeletal_extractor_node(Node):
                 
                 # all_marker_list.extend([add_keypoint_marker])
                 all_marker_list.extend([add_keypoint_marker, add_geo_center_marker, add_line_marker])
-        
-        if self.save:
-            self.filtered_keypoints = keypoints_3d
-            self.keypoints_mask = keypoints_mask
-            self.keypoints_no_Kalman = keypoints_no_Kalman
+
+        # if self.save:
+        #     self.filtered_keypoints = keypoints_3d
+        #     self.keypoints_mask = keypoints_mask
+        #     self.keypoints_no_Kalman = keypoints_no_Kalman
 
         # Publish keypoints and markers
 
@@ -447,12 +449,12 @@ def main(args=None) -> None:
                                    outlier_filter=OUTLIER_FILTER,
                                    rviz=RVIZ_VIS,
                                    save=SAVE_DATA,
-                                   ref_link='link_head',
+                                   rotate=CAMERA_ROTATE,
                                    )
     
     logger.success(f"{SKELETON_NODE} Node initialized")
     rclpy.spin(node)
-        
+
 
 if __name__ == '__main__':
     # if SAVE_DATA:
